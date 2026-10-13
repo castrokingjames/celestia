@@ -15,7 +15,7 @@ const DEMO_USER = (import.meta.env.VITE_DEMO_USER as string) ?? "neo";
 const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-dev";
 const ORIGIN_X = 400, ORIGIN_Y = 300; // center world (0,0) in the 800x600 view
 const DT_MAX = 0.05;
-const INTERP_DELAY_MS = 100; // render remotes this far in the past, between two real snapshots (smooth vs jitter)
+const INTERP_DELAY_MS = 150; // render remotes this far behind the SERVER clock, between two snapshots (jitter-proof)
 
 type Snap = { t: number; x: number; y: number };
 type View = { rect: Phaser.GameObjects.Rectangle; buf: Snap[] };
@@ -31,6 +31,8 @@ function applyCmd(pos: { x: number; y: number }, c: InputCommand): void {
 class ZoneScene extends Phaser.Scene {
   private room!: Room;
   private views = new Map<string, View>(); // OTHER players (interpolated)
+  private serverT = 0;      // latest server clock (state.t) from the most recent patch
+  private serverTLocal = 0; // performance.now() when serverT arrived (to extrapolate the server clock between patches)
   private selfId = "";
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private status!: Phaser.GameObjects.Text;
@@ -69,18 +71,27 @@ class ZoneScene extends Phaser.Scene {
         $(player).onChange(() => this.reconcile(player.x, player.y, player.lastSeq));
       } else {
         const rect = this.add.rectangle(player.x + ORIGIN_X, player.y + ORIGIN_Y, 24, 24, 0x60a5fa);
-        const v: View = { rect, buf: [{ t: performance.now(), x: player.x, y: player.y }] };
-        this.views.set(id, v);
-        // buffer each authoritative update with its arrival time; update() renders ~INTERP_DELAY_MS behind
-        $(player).onChange(() => {
-          v.buf.push({ t: performance.now(), x: player.x, y: player.y });
-          if (v.buf.length > 30) v.buf.shift();
-        });
+        this.views.set(id, { rect, buf: [] });
+        // remote snapshots are sampled per-patch on the SERVER clock in room.onStateChange (below),
+        // not here — so the interpolation timeline is the server's, immune to packet-arrival jitter.
       }
     });
     $(this.room.state).players.onRemove((_p: any, id: string) => {
       this.views.get(id)?.rect.destroy();
       this.views.delete(id);
+    });
+
+    // Per-patch (20 Hz): anchor the server clock + append a snapshot for each remote on the SERVER
+    // timeline. Fires after the whole patch is applied, so state.t is current.
+    this.room.onStateChange((state: any) => {
+      this.serverT = state.t;
+      this.serverTLocal = performance.now();
+      this.views.forEach((v, id) => {
+        const p = state.players.get(id);
+        if (!p) return;
+        v.buf.push({ t: state.t, x: p.x, y: p.y });
+        if (v.buf.length > 30) v.buf.shift();
+      });
     });
   }
 
@@ -108,12 +119,15 @@ class ZoneScene extends Phaser.Scene {
     // self rendered at its PREDICTED position (feels instant); corrected invisibly on reconcile
     if (this.selfRect) { this.selfRect.x = this.self.x + ORIGIN_X; this.selfRect.y = this.self.y + ORIGIN_Y; }
 
-    // others: SNAPSHOT-BUFFER interpolation — render ~INTERP_DELAY_MS in the past, between the two
-    // buffered authoritative snapshots that bracket that render time. Smooth under jitter, unlike a
-    // lerp-toward-latest (which hops when 20 Hz patches arrive bursty over the internet).
-    const renderT = performance.now() - INTERP_DELAY_MS;
+    // others: play buffered snapshots back on the SERVER clock, rendered INTERP_DELAY_MS behind,
+    // interpolating between the two that bracket that time. The timeline is the server's (not
+    // packet-arrival time), so jitter can't make remotes hop — only an underflow (updates stalled
+    // past the buffer) briefly holds at the newest.
+    const estServerNow = this.serverT + (performance.now() - this.serverTLocal);
+    const renderT = estServerNow - INTERP_DELAY_MS;
     this.views.forEach((v) => {
       const buf = v.buf;
+      if (buf.length === 0) return;
       let x = buf[0].x;
       let y = buf[0].y;
       if (renderT >= buf[buf.length - 1].t) {

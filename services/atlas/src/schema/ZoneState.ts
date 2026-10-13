@@ -9,5 +9,8 @@ export class Player extends Schema {
 }
 
 export class ZoneState extends Schema {
+  // Server clock (ms), advanced one TICK per 20 Hz step. Clients interpolate remote players on THIS
+  // timeline (not packet-arrival time) so network jitter can't make remotes hop. See docs/REALTIME.md §3.
+  @type("number") t = 0;
   @type({ map: Player }) players = new MapSchema<Player>();
 }
