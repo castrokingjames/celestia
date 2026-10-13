@@ -7,7 +7,7 @@ world; meta owns identity and the durable, out-of-band state around it.
 ## Responsibilities
 
 - **Auth** — login/registration (login *is* registration), the `AuthMethod` port + adapters
-  (dev now; Discord/Google/Steam/wallet later), session issuance (EdDSA JWT access + opaque
+  (basic now; Discord/Google/Steam/wallet later), session issuance (EdDSA JWT access + opaque
   rotating refresh), and the one-time **connect-ticket** that hands a player off to realtime.
 - **Accounts** — the durable `account` principal (stable `account_id`) + `auth_identity` satellites.
 - **Entitlement / gating** — account `status` (active/suspended/banned). Distinct from authz
@@ -33,22 +33,23 @@ new adapters behind the `AuthMethod` port — never a schema migration. See `mig
 ```
 migrations/              plain .sql, forward-only (0001_identity.sql = role/account/auth_identity/refresh_token)
 scripts/gen-dev-keys.ts  generate a dev Ed25519 keypair (base64 PEM) into .env
+scripts/grant.ts         server-local admin CLI: set an account's role (bootstrap first `ignis`) — DB-direct, G11
 src/
   index.ts               COMPOSITION ROOT — names concrete adapters, wires them, listens (G7)
-  app.ts                 Fastify routes: GET /health · POST /auth/:method · /auth/refresh · /auth/logout
+  app.ts                 Fastify routes: GET /health · POST /auth/:method · /auth/refresh · /auth/logout · /auth/ticket
   config.ts              zod-validated config (config/default.json + env secrets)
   db/                    Kysely schema types · pooled client · forward-only migration runner
-  accounts/              AccountStore port + Kysely adapter + findOrCreateAccount (login==registration)
+  accounts/              AccountStore + findOrCreateAccount (login==registration) + grantRole (role admin)
   auth/
     auth-method.port.ts  the AuthMethod port + VerifiedIdentity (the seam)
     methods/basic.auth-method.ts   basic login adapter (username + BASIC_AUTH_SECRET)
-    session.service.ts   EdDSA JWT access + opaque rotating refresh (+ RefreshStore port/adapter)
+    session.service.ts   EdDSA JWT access + opaque rotating refresh + connect-ticket (+ RefreshStore)
 ```
 
 ## Status
 
-**P1 — auth core live over HTTP (Fastify).** Done ✅: identity schema + elements-roles · `AuthMethod`
-port + `basic` method · find-or-create (login==registration) · session issuance (EdDSA access +
-rotating refresh, reuse detection, ban-takes-effect-on-refresh) · `POST /auth/basic` ·
-`POST /auth/refresh` · `POST /auth/logout` · `GET /health`. Next: grant CLI (bootstrap first `ignis`)
-· connect-ticket hand-off to realtime · client SDK auth flow. Stack: Fastify · Kysely + `pg` · `jose` (EdDSA).
+**P1 — auth live over HTTP (Fastify), deployed.** Done ✅: identity schema + elements-roles · `AuthMethod`
+port + `basic` method · find-or-create (login==registration) · sessions (EdDSA access + opaque rotating
+refresh, reuse detection, ban-on-refresh) · `POST /auth/basic|refresh|logout|ticket` · `GET /health` ·
+connect-ticket hand-off (verified in Atlas `onAuth`) · `grant` CLI (bootstrap first `ignis`, G11). Next:
+Discord/wallet methods · matchmaking · social. Stack: Fastify · Kysely + `pg` · `jose` (EdDSA).

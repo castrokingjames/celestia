@@ -11,6 +11,7 @@
     "start": "tsx src/index.ts",
     "migrate": "node --env-file=../../.env --import tsx src/db/migrate.ts",
     "gen-dev-keys": "node --import tsx scripts/gen-dev-keys.ts",
+    "grant": "node --env-file=../../.env --import tsx scripts/grant.ts",
     "test": "node --env-file=../../.env --import tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
