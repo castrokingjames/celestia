@@ -4,6 +4,7 @@
 //   GET  /health          liveness
 //   POST /auth/:method     login == registration for an enabled AuthMethod -> { session, account, created }
 import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import type { AuthMethod } from "./auth/auth-method.port.js";
 import type { AccountStore } from "./accounts/account.store.js";
 import type { SessionService } from "./auth/session.service.js";
@@ -14,10 +15,16 @@ export interface AppDeps {
   methods: Map<string, AuthMethod>;
   accounts: AccountStore;
   sessions: SessionService;
+  /** Browser origins allowed to call this API (the client is a different origin). */
+  corsOrigins: string[];
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({ logger: false });
+
+  // Browser clients are cross-origin (the game page ≠ this API host), so allow the configured
+  // origins. Registered before routes so the CORS hooks apply to all of them.
+  app.register(cors, { origin: deps.corsOrigins });
 
   app.get("/health", async () => ({ status: "up" }));
 

@@ -34,7 +34,7 @@ for (const id of config.auth.enabledMethods) {
   methods.set(id, make());
 }
 
-const app = buildApp({ methods, accounts, sessions });
+const app = buildApp({ methods, accounts, sessions, corsOrigins: config.corsOrigins });
 app
   .listen({ port: Number(process.env.PORT) || config.metaPort, host: "0.0.0.0" })
   .then((addr) => console.log(`[meta] listening on ${addr}  (methods: ${[...methods.keys()].join(", ")})`))

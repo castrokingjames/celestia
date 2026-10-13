@@ -46,6 +46,7 @@ export const config = {
   env: file.env,
   auth: file.auth,
   metaPort: file.meta.port,
+  corsOrigins: file.meta.corsOrigins,
   databaseUrl: requireEnv(file.datastores.postgresUrlEnv), // config names the var; env holds the secret
   basicAuthSecret: requireEnv("BASIC_AUTH_SECRET"),
   jwtPrivateKeyPem: requireB64Pem("JWT_PRIVATE_KEY"),

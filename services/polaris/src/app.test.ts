@@ -27,6 +27,7 @@ const app = buildApp({
   methods: new Map([["basic", new BasicAuthMethod(config.basicAuthSecret)]]),
   accounts,
   sessions,
+  corsOrigins: config.corsOrigins,
 });
 
 const user = () => `http_${randomUUID()}`;
