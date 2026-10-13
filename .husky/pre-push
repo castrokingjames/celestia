@@ -1,8 +1,9 @@
 #!/usr/bin/env sh
-# Celestia pre-push. ACTIVATES ONLY after `git init` + `pnpm install`. Until then this file is inert.
+# Celestia pre-push — type-safety gate before sharing. Uses `corepack pnpm` (resolves without the
+# pnpm shim on PATH) + pnpm's own workspace recursion, NOT turbo (which can't find pnpm in this env).
+# Full DB-backed tests run in CI / manually (`pnpm test`) — they need Postgres up, so not a push gate.
 
-# Full test gate before pushing.
-pnpm turbo run test || {
-  echo "✖ tests failed — not pushing."
+corepack pnpm -r run typecheck || {
+  echo "✖ typecheck failed — not pushing. (run: corepack pnpm -r run typecheck)"
   exit 1
 }
