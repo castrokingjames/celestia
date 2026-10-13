@@ -1,0 +1,22 @@
+# Infra only — Postgres (+ Valkey). App code runs on the HOST via `pnpm dev` (hot-reload).
+# Valkey is included but NOT required until multi-process (see docs/INFRA.md, docs/REALTIME.md §10).
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: celestia
+      POSTGRES_PASSWORD: celestia
+      POSTGRES_DB: celestia
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:

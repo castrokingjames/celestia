@@ -1,0 +1,4 @@
+packages:
+  - "services/*"
+  - "packages/*"
+  - "client/phaser"

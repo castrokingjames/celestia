@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.turbo/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Pasted reference game only — not part of Celestia; keep out of history (see task #10)
+BrowserQuest/
+
+# Godot
+client/godot/.godot/
+client/godot/android/
+export_presets.cfg

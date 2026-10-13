@@ -1,0 +1,41 @@
+{
+  "_comment": "Non-secret SERVER config (dev defaults). SECRETS (JWT keys, DB/Redis creds, Discord secret) come from env — see datastores.*Env + .env, never inline here. Shared values the client also needs (e.g. MOVE_SPEED, intent types) live in packages/net-contract. Game-balance DATA (combat/mobs/loot) lives with the GameModule. Later: a zod-validated loader (@celestia/config) + per-env overrides (dev/staging/prod) that merge env secrets on top.",
+
+  "env": "dev",
+
+  "realtime": {
+    "port": 2567,
+    "tickHz": 20,
+    "patchRateHz": 20,
+    "maxClientsPerChannel": 1000
+  },
+
+  "meta": {
+    "port": 3000,
+    "corsOrigins": ["http://localhost:5173"]
+  },
+
+  "auth": {
+    "enabledMethods": ["basic"],
+    "accessTokenTtlSec": 900,
+    "refreshTokenTtlSec": 2592000,
+    "connectTicketTtlSec": 30,
+    "discord": { "enabled": false, "guildId": "" }
+  },
+
+  "datastores": {
+    "postgresUrlEnv": "DATABASE_URL",
+    "valkeyUrlEnv": "VALKEY_URL"
+  },
+
+  "limits": {
+    "intentRatePerSec": 30,
+    "reconnectGraceSec": 60
+  },
+
+  "flags": {
+    "llm": false,
+    "web3": false,
+    "maintenance": false
+  }
+}
