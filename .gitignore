@@ -7,8 +7,9 @@ dist/
 !.env.example
 .DS_Store
 
-# Pasted reference game only — not part of Celestia; keep out of history (see task #10)
+# Pasted reference code only — not part of Celestia; keep out of history
 BrowserQuest/
+node-dead-reckoning/
 
 # Godot
 client/astrolabe/.godot/

@@ -16,6 +16,7 @@ const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-
 const ORIGIN_X = 400, ORIGIN_Y = 300; // center world (0,0) in the 800x600 view
 const DT_MAX = 0.05;
 const INTERP_DELAY_MS = 300; // render remotes this far behind the SERVER clock, between two snapshots (jitter buffer)
+const EXTRAP_MAX_MS = 150;   // on buffer underflow (server stalled), extrapolate last velocity up to this, then hold
 
 type Snap = { t: number; x: number; y: number };
 type View = { rect: Phaser.GameObjects.Rectangle; buf: Snap[] };
@@ -134,9 +135,19 @@ class ZoneScene extends Phaser.Scene {
       let x = buf[0].x;
       let y = buf[0].y;
       if (renderT >= buf[buf.length - 1].t) {
-        const last = buf[buf.length - 1]; // updates stalled past the delay → hold at newest (no extrapolation)
-        x = last.x;
-        y = last.y;
+        // UNDERFLOW: updates stalled past the buffer (e.g. a free-tier server-tick hitch). Extrapolate
+        // the last-known velocity for a capped window so the remote keeps gliding instead of freezing;
+        // past the cap, hold. (Any overshoot on a direction change self-corrects once snapshots resume.)
+        const last = buf[buf.length - 1];
+        const prev = buf.length >= 2 ? buf[buf.length - 2] : undefined;
+        const ahead = Math.min(renderT - last.t, EXTRAP_MAX_MS);
+        if (prev && last.t > prev.t) {
+          x = last.x + ((last.x - prev.x) / (last.t - prev.t)) * ahead;
+          y = last.y + ((last.y - prev.y) / (last.t - prev.t)) * ahead;
+        } else {
+          x = last.x;
+          y = last.y;
+        }
       } else if (renderT > buf[0].t) {
         let i = 0;
         while (i < buf.length - 1 && buf[i + 1].t < renderT) i++;
