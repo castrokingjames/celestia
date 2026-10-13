@@ -1,5 +1,5 @@
 // SessionService acceptance tests against the REAL Postgres + the dev keypair in .env
-// (run `pnpm --filter @celestia/meta gen-dev-keys` + `migrate` first). when/then naming.
+// (run `pnpm --filter @celestia/polaris gen-dev-keys` + `migrate` first). when/then naming.
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";

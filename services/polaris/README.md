@@ -1,7 +1,7 @@
-# @celestia/meta
+# @celestia/polaris
 
 The **meta** service: the HTTP, persistent, global, cross-zone tier. Everything that is *not*
-the live 20 Hz simulation lives here. The realtime server (`services/realtime`) owns the running
+the live 20 Hz simulation lives here. The realtime server (`services/atlas`) owns the running
 world; meta owns identity and the durable, out-of-band state around it.
 
 ## Responsibilities

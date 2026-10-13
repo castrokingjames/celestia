@@ -5,7 +5,7 @@ description: Wire a new Colyseus intent end-to-end — client intent → room on
 
 # Wire a Colyseus intent
 
-Add a client→server action the authoritative way. **Copy the canonical example** (the `move` intent in `services/realtime/src/rooms/ZoneRoom.ts` + `ZoneState.ts`) — don't hand-roll a new shape.
+Add a client→server action the authoritative way. **Copy the canonical example** (the `move` intent in `services/atlas/src/rooms/ZoneRoom.ts` + `ZoneState.ts`) — don't hand-roll a new shape.
 
 ## Steps
 

@@ -3,7 +3,7 @@
 -- THE one schema that must be right up front (ruinous to retrofit): a stable internal
 -- account_id, with login methods as satellites. MANY auth_identity rows -> ONE account.
 -- Adding Discord/Google/Apple/Steam/wallet later = new auth_identity rows + a new
--- AuthMethod adapter. It is NEVER a schema rework. See services/meta/README.md + docs/AUTH.md.
+-- AuthMethod adapter. It is NEVER a schema rework. See services/polaris/README.md + docs/AUTH.md.
 --
 -- Postgres 17: gen_random_uuid() is built in (no pgcrypto needed).
 

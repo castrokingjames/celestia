@@ -1,7 +1,7 @@
 // gen-dev-keys.ts — generate a dev Ed25519 keypair (base64-encoded PEM) into the repo-root .env.
 // DEV CONVENIENCE ONLY — production keys come from a secret manager, never from this. Idempotent:
 // skips if JWT_PRIVATE_KEY is already set unless --force is passed. Run:
-//   pnpm --filter @celestia/meta gen-dev-keys [--force]
+//   pnpm --filter @celestia/polaris gen-dev-keys [--force]
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

@@ -1,6 +1,6 @@
 // migrate.ts — minimal forward-only migration runner. Applies migrations/*.sql in filename
 // order, each in its own transaction, recording applied files in schema_migrations so re-runs
-// are idempotent. No down-migrations (roll forward). Run: pnpm --filter @celestia/meta migrate
+// are idempotent. No down-migrations (roll forward). Run: pnpm --filter @celestia/polaris migrate
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";

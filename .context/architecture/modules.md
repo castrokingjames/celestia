@@ -9,7 +9,7 @@
 ## Current graph
 
 ```
-services/realtime  ──imports──▶  packages/net-contract      (PROTOCOL_VERSION, intent types)
+services/atlas  ──imports──▶  packages/net-contract      (PROTOCOL_VERSION, intent types)
 client/godot/            ──(codegen later: net-contract → celestia_contract.gd)
 ```
 

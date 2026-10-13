@@ -18,7 +18,7 @@ docker-compose.infra.yml   Postgres + Valkey (infra only; the app runs on the ho
 ```bash
 pnpm install
 pnpm infra:up                              # Postgres (+ Valkey) via docker compose
-pnpm --filter @celestia/realtime dev       # the 20 Hz zone server on :2567  (GET /health)
+pnpm --filter @celestia/atlas dev       # the 20 Hz zone server on :2567  (GET /health)
 ```
 
 Then run the Phaser netcode POC: `pnpm --filter @celestia/client-phaser dev` → http://localhost:5173 (instant HMR, connects to `:2567`). `client/godot/` is the Godot destination client — parked while the netcode design is proven in the POC.

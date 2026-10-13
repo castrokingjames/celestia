@@ -281,5 +281,16 @@ The client SDK is **Jupiter** (facade autoload), chunked into *moon* modules:
 
 `jupiter/io` auth · `jupiter/europa` transport · `jupiter/ganymede` state · `jupiter/callisto` intents · `jupiter/metis` contract · `jupiter/amalthea` dialogue *(opt)* · `jupiter/thebe` wallet/web3 *(opt)*
 
-*(The per-service names elsewhere in this file — Janus/Astraea/Atlas/Vesta/… and the server-SDK name — remain **proposals pending confirmation**; only the client = Jupiter is locked so far.)*
+*(The per-service names elsewhere in this file — Janus/Astraea/Atlas/Vesta/… and the server-SDK name — remain **proposals pending confirmation**; the client = Jupiter was locked first.)*
+
+---
+
+## LOCKED — Services (2026-10-13): **Atlas** + **Polaris**
+
+The two live backend services carry a celestial codename as **both their directory and package name** (pure-codename, convention (b) — not the earlier role-nouns `realtime`/`meta`, which conflicted with guardrail G10):
+
+- **Atlas** — the realtime world-server (`services/atlas` · `@celestia/atlas`): Colyseus 20 Hz authoritative sim + connect-ticket `onAuth`. (§5 world-server ★.)
+- **Polaris** — the meta tier (`services/polaris` · `@celestia/polaris`): auth, accounts, sessions, connect-ticket issuance; later matchmaking/social. (§2 meta-backend ★.)
+
+Shared leaf packages stay descriptive (`@celestia/net-contract`). Future services take their ★ from the menu above when built (cognition → Mercury/Calliope, authz → Libra, economy → Moneta, …).
 

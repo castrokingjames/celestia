@@ -13,7 +13,7 @@ Monorepo: **pnpm + Turborepo**, **Node 22**, **TypeScript 5.7**.
 ```bash
 pnpm install                                   # (pnpm comes via corepack if not on PATH)
 pnpm infra:up                                  # Postgres(+Valkey) via docker compose
-pnpm --filter @celestia/realtime dev           # 20 Hz zone server on :2567 (GET /health)
+pnpm --filter @celestia/atlas dev           # 20 Hz zone server on :2567 (GET /health)
 pnpm build | pnpm typecheck | pnpm lint | pnpm test   # turbo across the workspace
 ```
 
@@ -23,11 +23,11 @@ If `turbo` can't find the pnpm binary, run `corepack enable` first (puts pnpm on
 
 | Path | What | Status |
 |---|---|---|
-| `services/realtime` | Colyseus zone server — the TCB; 20 Hz authoritative sim, rooms, intents | **now** |
+| `services/atlas` | **Atlas** — realtime world-server (TCB): Colyseus 20 Hz authoritative sim, rooms, intents, connect-ticket `onAuth` | **now** |
 | `packages/net-contract` | shared wire contract (`PROTOCOL_VERSION`, intent types) | **now** |
 | `client/phaser/` | throwaway netcode POC — Vite + Phaser + colyseus.js | **now (POC)** |
 | `client/godot/` | Godot 4.5 client — the **Jupiter** SDK (destination client) | later |
-| `services/meta` | NestJS HTTP meta: auth/accounts/social | later (P1) |
+| `services/polaris` | **Polaris** — meta tier (Fastify HTTP): auth, accounts, sessions, connect-ticket; later matchmaking/social | **now** (auth live) |
 | `services/cognition` | LLM gateway (Mercury/Calliope) | later (P2; in-process module until then) |
 | `packages/{ledger,event,authz}-contract` | EconomyService, event registry, `can()` | later (seams) |
 
@@ -44,7 +44,7 @@ If `turbo` can't find the pnpm binary, run `corepack enable` first (puts pnpm on
 7. **Ports/adapters.** Only the composition root (server) / `Jupiter` (client) names a concrete adapter class. Callers depend on the port, never a concrete.
 8. **No secrets in code.** Ever. Config via env.
 9. **Determinism.** Fixed-timestep sim, seeded RNG, no wall-clock inside reducers.
-10. **Naming/structure.** `services/` (not `apps/`), `realtime` (not `game-server`).
+10. **Naming/structure.** `services/` (not `apps/`), never a `-server` suffix. Services are named by their **celestial codename** (`docs/NAMING.md`): `atlas` (world-server), `polaris` (meta), cognition later (`mercury`/`calliope`). "realtime"/"meta" are *function* words in prose; the dir/package IS the codename (`services/atlas`, `@celestia/atlas`).
 11. **Client never sets its own privilege.** Identity/role/entitlement are **server-assigned** — an auth/login request carries a credential to verify, never a requested role. Everyone lands at baseline (`terra`); elevation only via an audited admin action by an already-privileged principal (or server-local bootstrap), never self-service. Gating a session (a shared secret like `BASIC_AUTH_SECRET`) ≠ granting a role; **no shareable secret ever grants privilege.** `can()` reads authority from authoritative state, never a client-asserted `role`/claim.
 
 ## Working principles

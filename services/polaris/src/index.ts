@@ -1,6 +1,6 @@
 // index.ts — meta's COMPOSITION ROOT: the one place that names concrete adapters (guardrail #7)
 // and wires them into the app. Constructs the DB client, stores, SessionService, and the enabled
-// AuthMethod adapters (from config.auth.enabledMethods), then listens. Run: pnpm --filter @celestia/meta dev
+// AuthMethod adapters (from config.auth.enabledMethods), then listens. Run: pnpm --filter @celestia/polaris dev
 import { config } from "./config.js";
 import { createDb } from "./db/client.js";
 import { KyselyAccountStore } from "./accounts/kysely-account.store.js";

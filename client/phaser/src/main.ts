@@ -1,4 +1,4 @@
-// Celestia netcode POC — Vite + Phaser + colyseus.js against services/realtime.
+// Celestia netcode POC — Vite + Phaser + colyseus.js against services/atlas.
 // Throwaway harness to iron out movement → interactions → interp/sync/reconciliation (docs/REALTIME.md §3),
 // then rebuild on Godot. Shares the SAME wire contract as the server (no codegen — TS↔TS).
 //

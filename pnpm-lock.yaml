@@ -49,7 +49,35 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  services/meta:
+  services/atlas:
+    dependencies:
+      '@celestia/net-contract':
+        specifier: workspace:*
+        version: link:../../packages/net-contract
+      '@colyseus/core':
+        specifier: ^0.16.0
+        version: 0.16.26(@colyseus/schema@3.0.76)(@pm2/io@6.1.0)
+      '@colyseus/schema':
+        specifier: ^3.0.0
+        version: 3.0.76
+      '@colyseus/ws-transport':
+        specifier: ^0.16.0
+        version: 0.16.5(@colyseus/core@0.16.26(@colyseus/schema@3.0.76)(@pm2/io@6.1.0))
+      jose:
+        specifier: ^5.9.0
+        version: 5.10.0
+      tsx:
+        specifier: ^4.19.0
+        version: 4.23.15
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  services/polaris:
     dependencies:
       '@celestia/net-contract':
         specifier: workspace:*
@@ -79,34 +107,6 @@ importers:
       '@types/pg':
         specifier: ^8.11.0
         version: 8.23.1
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  services/realtime:
-    dependencies:
-      '@celestia/net-contract':
-        specifier: workspace:*
-        version: link:../../packages/net-contract
-      '@colyseus/core':
-        specifier: ^0.16.0
-        version: 0.16.26(@colyseus/schema@3.0.76)(@pm2/io@6.1.0)
-      '@colyseus/schema':
-        specifier: ^3.0.0
-        version: 3.0.76
-      '@colyseus/ws-transport':
-        specifier: ^0.16.0
-        version: 0.16.5(@colyseus/core@0.16.26(@colyseus/schema@3.0.76)(@pm2/io@6.1.0))
-      jose:
-        specifier: ^5.9.0
-        version: 5.10.0
-      tsx:
-        specifier: ^4.19.0
-        version: 4.23.15
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.20.5
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

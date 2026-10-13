@@ -37,7 +37,7 @@ function requireEnv(name: string): string {
 function requireB64Pem(name: string): string {
   const pem = Buffer.from(requireEnv(name), "base64").toString("utf8");
   if (!pem.includes("-----BEGIN")) {
-    throw new Error(`${name} must be base64-encoded PEM — run: pnpm --filter @celestia/meta gen-dev-keys`);
+    throw new Error(`${name} must be base64-encoded PEM — run: pnpm --filter @celestia/polaris gen-dev-keys`);
   }
   return pem;
 }

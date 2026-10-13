@@ -1,4 +1,4 @@
-// Acceptance tests for find-or-create against the REAL Postgres (run `pnpm --filter @celestia/meta
+// Acceptance tests for find-or-create against the REAL Postgres (run `pnpm --filter @celestia/polaris
 // migrate` first). Naming convention: describe(<unit>) + it("when <condition>, then <outcome>"),
 // one behavior per case. Random external id per run so repeated runs don't collide.
 import { describe, it, after } from "node:test";
