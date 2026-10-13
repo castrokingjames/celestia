@@ -75,6 +75,7 @@ If `turbo` can't find the pnpm binary, run `corepack enable` first (puts pnpm on
 |---|---|
 | anything (first) | `docs/PLANNING.md`, `docs/BUILD-PLAN.md` |
 | real-time / netcode / tick / zones / AoI | `docs/REALTIME.md` + `.context/architecture/guardrails.md` |
+| movement netcode as built / smoothing / jitter | `docs/NETCODE.md` |
 | the stack / versions | `docs/TECH-STACK.md` |
 | infra / health / status | `docs/INFRA.md` |
 | engine vs game-module boundary | `docs/PLATFORM.md` + `.context/architecture/modules.md` |

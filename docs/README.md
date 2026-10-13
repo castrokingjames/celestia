@@ -8,7 +8,8 @@ All design docs for Celestia (real-time MMO + reusable multi-game engine). Where
 
 ## Architecture
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — end-to-end seams; event-log-as-truth; clock authority.
-- [REALTIME.md](./REALTIME.md) — **real-time world / netcode / scaling** (tick, prediction, World>Zone>Sector, AoI, channels). *Supersedes the old cozy/low-tick premise elsewhere.*
+- [REALTIME.md](./REALTIME.md) — **real-time world / netcode / scaling** design (tick, prediction, World>Zone>Sector, AoI, channels). *Supersedes the old cozy/low-tick premise elsewhere.*
+- [NETCODE.md](./NETCODE.md) — **movement netcode as built** (predict + reconcile · server-clock interpolation · extrapolation), the lessons, and what to improve. Companion/as-built counterpart to REALTIME.md.
 - [TECH-STACK.md](./TECH-STACK.md) — the decided stack + pinned versions + the 4 integration decisions.
 - [INFRA.md](./INFRA.md) — lean infra, sizing, scaling path, **§9 health checks & status page**.
 - [PLATFORM.md](./PLATFORM.md) — engine ↔ GameModule boundary; reuse across games.
@@ -30,5 +31,5 @@ All design docs for Celestia (real-time MMO + reusable multi-game engine). Where
 - [WEB3-READINESS.md](./WEB3-READINESS.md) — bake-in-now vs defer seams.
 
 ## Meta
-- [NAMING.md](./NAMING.md) — codename menu (client SDK = **Jupiter**, locked).
+- [NAMING.md](./NAMING.md) — codename menu + locks: SDK **Jupiter** · services **Atlas** (world) / **Polaris** (meta) · clients **Astrolabe** (Godot) / **Phaethon** (Phaser POC).
 - [OPEN-QUESTIONS.md](./OPEN-QUESTIONS.md) — parking lot for unresolved / needs-analysis items.
