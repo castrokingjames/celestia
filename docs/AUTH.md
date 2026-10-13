@@ -3,11 +3,72 @@
 
 # Celestia Authentication Specification
 
-**Status:** Authoritative. Supersedes the four design facets and resolves every red-team finding.
+**Status:** **The "As built (P1)" section below is authoritative for what currently exists.** §0–§8 are the original forward design (Discord/Telegram/alpha-gated, NestJS + Passport + Redis) — **largely NOT yet implemented**; treat them as the aspirational target, not current state. **Where the two conflict, As built wins.**
 **Owners:** Platform / Auth.
-**Scope:** Discord-authenticated sessions for the Godot 4 client on Web, Desktop, Mobile, and the Telegram Mini App; NestJS as account authority + token issuer; Colyseus as offline-verifying resource server.
+**Scope (design target):** Discord-authenticated sessions for the Godot client across Web/Desktop/Mobile/Telegram; a meta service as account authority + token issuer; the realtime server as offline-verifying resource server. **What's built today is a small subset — see As built (P1).**
 
 > This document opens with a **Canonical Constants** block. Section-level drift (channel names, claim shapes, subject ids, signing algorithms) was the top-ranked risk in red-team; those values are frozen here and MUST be imported from a single shared package (`@celestia/auth-contract`), never re-declared per service. A contract test (§7, MUST-13) fails CI if issuer and verifier disagree.
+
+---
+
+## As built (P1) — authoritative for the current implementation
+
+What actually ships today is a lean subset of the design below: **Polaris** (`services/polaris`, `@celestia/polaris`) — a **Fastify** HTTP service on **Kysely + node-postgres** and **`jose`** (EdDSA) — plus connect-ticket verification in **Atlas** (`services/atlas`, Colyseus). **No Discord, Telegram, NestJS, Passport, or Redis/Valkey yet** — those stay forward design.
+
+**Auth method (port + adapters).** `AuthMethod` is an **authentication-only** port (authn, not authz). The one implemented adapter is **`basic`**: `{ username, secret }`, where `secret` is a shared **`BASIC_AUTH_SECRET`** that only gates *access to the method* — it grants **no role**. Discord/Google/Apple/Steam/wallet are future sibling adapters behind the same port (no core change). The username is the stable external id.
+
+**Identity — login *is* registration** (`migrations/0001_identity.sql`):
+- `account` — stable internal `account_id` (uuid); `handle` (chosen later, nullable); `role` (→ `role` table, default `terra`); `status` (`active|suspended|banned`).
+- `auth_identity(method, external_id)` **UNIQUE → `account_id`**, many-to-one — the satellite table that makes adding methods *and* account-linking a non-migration.
+- `refresh_token` — opaque, rotating, **hashed at rest**.
+- `role` — the seeded **elements** vocabulary (below).
+
+`findOrCreateAccount`: first sight of a `(method, external_id)` creates the account at role `terra`; the response carries `{ session, account, created }`.
+
+**Sessions** (`SessionService`, `jose`):
+- **Access** = EdDSA **JWT**; claims `sub` = `account_id` + `role` (role read from authoritative DB — **G11**, never a client input). TTL 900 s.
+- **Refresh** = opaque random token, **rotating**; only a pepper-HMAC (`AUTH_TOKEN_PEPPER`) is stored, never the raw. Rotation chain; **reuse of a spent token burns the account's whole chain**; refresh re-reads role from the DB and **refuses if `account.status != 'active'`** (ban-takes-effect-on-refresh). TTL 30 d.
+
+**HTTP endpoints** (Fastify, `src/app.ts`):
+
+| route | does |
+|---|---|
+| `POST /auth/:method` | login == registration for an enabled method (`basic` now) → `{ session, account, created }`, always role `terra` |
+| `POST /auth/refresh` | rotate refresh → new session; replay / expired / inactive → 401 |
+| `POST /auth/logout` | revoke the presented refresh (idempotent) → 204 |
+| `POST /auth/ticket` | `Bearer <access>` → a one-time **connect-ticket** for the realtime server |
+| `GET /health` | liveness |
+
+CORS via `config.corsOrigins`; enabled methods via `config.auth.enabledMethods` (`["basic"]`).
+
+**Connect-ticket (meta → realtime handoff).** `POST /auth/ticket` (bearer access; re-reads the authoritative account) issues a short-TTL EdDSA JWT (`config.auth.connectTicketTtlSec`, 30 s) with `aud: "realtime"` + a `jti`. **Atlas** verifies it in `onAuth` (same public key, `aud` + one-time `jti` dedupe) and rejects any join without a valid ticket (`services/atlas/src/auth/ticket.ts`). *(No Redis `GETDEL`; the ticket is a self-verifying signed JWT with an in-process jti guard — single-process for now.)*
+
+**Roles = the "elements" vocabulary** (`docs/NAMING.md`), seeded in the `role` table, stored on `account.role`:
+- **active:** `terra` (default player) · `aqua` (tester) · `aer` (staff) · `ignis` (admin/root).
+- **reserved** (seeded `active=false`): `lux` · `fulmen` · `magma` · `ventus` · `scintilla` · `vapor`.
+
+**G11 — client never sets its own privilege.** Every login lands at `terra`; role is server-only state a request can never ask for. Elevation only via an audited admin action by an already-privileged principal, or the **server-local `grant` CLI** (`pnpm --filter @celestia/polaris grant <handle|accountId> <role>`) — DB-direct, requiring shell/DB access, **no network path, no shareable secret**. Authz reads authority from `account.role`, never a client-asserted claim.
+
+**Secrets/env.** `BASIC_AUTH_SECRET` (gate) · `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY` (base64-encoded PEM; `gen-dev-keys`) · `AUTH_TOKEN_PEPPER`. (**Not** `CELESTIA_DEV_AUTH_SECRET`.)
+
+### Divergence from the forward design (§0–§8)
+
+| Design (below) | As built |
+|---|---|
+| `provider` / `idp_provider` enum | `AuthMethod` + `auth_identity.method` (text) |
+| `dev` method / `DevAuthMethod` / `CELESTIA_DEV_AUTH_SECRET` | the **`basic`** method / **`BASIC_AUTH_SECRET`** |
+| Passport (`passport-discord`, `passport-jwt`) | none — our `AuthMethod` adapters + `jose` only |
+| NestJS (Fastify adapter) | plain **Fastify** |
+| dbmate · ioredis/Valkey · Redis revocation overlay | custom SQL migrate runner · **no Redis yet** (connect-ticket = self-verifying JWT, not Redis `GETDEL`) |
+| Discord OAuth / PKCE / Telegram Mini App / handoff codes | **not built** — `basic` only (future adapters behind the port) |
+| Alpha guild-role gate · `ent:["alpha"]` · live revocation bus | **not built** — roles = elements vocab; `account.status` gates login; no live-revoke bus yet |
+| `external_identities` / `refresh_token_families` / `entitlements` | `auth_identity` / `refresh_token` / `role` (simpler) |
+| `MagicLinkMethod` + `tester_allowlist` | **not built** (future / optional) |
+| Access TTL 600 s | **900 s** |
+
+---
+
+> **§0 onward is the original forward/aspirational design** (Discord · Telegram · NestJS · Passport · Redis · alpha-gate) — **largely NOT yet implemented**. It's the target posture, not current state; where it conflicts with *As built (P1)* above, **As built wins**. Promote pieces into "As built" as they actually ship.
 
 ---
 
@@ -57,7 +118,9 @@ Celestia authenticates **every** user on **every** host — Web, Desktop, Mobile
 
 ## 1A. Auth Tech Stack (addendum — 2026-10-11)
 
-*The concrete runtime, frameworks, and libraries the auth subsystem is built on; reconciles TECH-STACK.md. Terminology: **"issue"** = create + sign a session token (auth); **"mint"** is reserved for web3 (on-chain assets). (A mint→issue sweep of this doc's older prose is pending — see §8.)*
+> ⚠️ **PLANNED stack — not as-built.** This section is the *aspirational* auth runtime (NestJS · Passport · Redis/Valkey · dbmate). What actually ships is leaner — **Fastify · `jose` · Kysely + node-postgres · no Passport · no Redis** — see **As built (P1)** at the top (As built wins on conflict). Kept here as the target posture.
+
+*Terminology: **"issue"** = create + sign a session token (auth); **"mint"** is reserved for web3 (on-chain assets).*
 
 ### Platform & runtime
 | Layer | Pick | Role |
