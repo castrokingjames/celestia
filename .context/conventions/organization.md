@@ -9,7 +9,7 @@ services/<role>/      runnable backend process
   src/schema/         @colyseus/schema state classes
 packages/<name>/      shared library (@celestia/<name>)
   src/index.ts        public surface
-client/godot/               Godot project
+client/astrolabe/               Godot project
   addons/jupiter/     the client SDK (facade + ports/adapters)
   game/               the game's entry node + scenes
 docs/                 design decisions (the authoritative docs)

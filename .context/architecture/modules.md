@@ -4,13 +4,13 @@
 
 - **`services/`** — runnable backend processes we deploy (`realtime` now; `meta`, `cognition` later). Each has its own entry point (`src/index.ts`) and `/health`.
 - **`packages/`** — shared libraries, imported by services (and the client codegen). Never run on their own.
-- **`client/godot/`** — the Godot 4.5 project (the Jupiter SDK). Not a Node service.
+- **`client/astrolabe/`** — the Godot 4.5 project (the Jupiter SDK). Not a Node service.
 
 ## Current graph
 
 ```
 services/atlas  ──imports──▶  packages/net-contract      (PROTOCOL_VERSION, intent types)
-client/godot/            ──(codegen later: net-contract → celestia_contract.gd)
+client/astrolabe/            ──(codegen later: net-contract → celestia_contract.gd)
 ```
 
 ## Dependency rules

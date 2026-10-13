@@ -1,6 +1,6 @@
 // Headless end-to-end check (no browser): proves the full login→play path AND that the realtime
 // server refuses unauthenticated joins. Start infra + meta + realtime first, then:
-//   pnpm -C client/phaser run smoke
+//   pnpm -C client/phaethon run smoke
 // 1) join WITHOUT a ticket -> rejected by onAuth.
 // 2) login via meta (our SDK) -> connect-ticket -> join -> send input -> authoritative x + lastSeq advance.
 import { Client, getStateCallbacks } from "colyseus.js";

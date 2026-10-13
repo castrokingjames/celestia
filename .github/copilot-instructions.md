@@ -5,7 +5,7 @@
 ## Project
 - Celestia is a real-time MMO + reusable multi-game engine; server-authoritative, event-sourced, intents-only. `Source: AGENTS.md#Mission`
 - Monorepo: pnpm + Turborepo, Node 22, TypeScript 5.7. Build/test: `pnpm build|test|lint|typecheck` (turbo). `Source: AGENTS.md#Build`
-- `services/` = runnable processes (`realtime` now), `packages/` = shared libs, `client/godot/` = Godot. `Source: .context/architecture/modules.md`
+- `services/` = runnable processes (`realtime` now), `packages/` = shared libs, `client/astrolabe/` = Godot. `Source: .context/architecture/modules.md`
 
 ## Guardrails (non-negotiable)
 - Client is never trusted — intents carry ids/indices/typed args, never amounts/prices/balances/state; the server computes numbers. `Source: .context/architecture/guardrails.md#G1`

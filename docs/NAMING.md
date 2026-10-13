@@ -294,3 +294,14 @@ The two live backend services carry a celestial codename as **both their directo
 
 Shared leaf packages stay descriptive (`@celestia/net-contract`). Future services take their ★ from the menu above when built (cognition → Mercury/Calliope, authz → Libra, economy → Moneta, …).
 
+---
+
+## LOCKED — Client surfaces (2026-10-13): **Astrolabe** + **Phaethon**
+
+The two client frontends carry a celestial codename as their directory (the engine — Godot/Phaser — is a descriptor, not the name). Both embed the **Jupiter** SDK:
+
+- **Astrolabe** — the destination **Godot** client (`client/astrolabe`): the primary window into the world (§13 instrument-menu ★).
+- **Phaethon** — the throwaway **Phaser** netcode POC harness (`client/phaethon` · `@celestia/phaethon`): asteroid 3200 Phaethon / the sun-charioteer myth, and the "Pha-" echoes "Phaser". A scrappy preview, discarded once the netcode graduates onto Astrolabe.
+
+The shared client SDK stays **Jupiter** (moon-modules per the lock above); it currently lives inside Phaethon and extracts to its own `jupiter` module when it graduates out of the POC.
+

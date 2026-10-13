@@ -25,13 +25,13 @@ If `turbo` can't find the pnpm binary, run `corepack enable` first (puts pnpm on
 |---|---|---|
 | `services/atlas` | **Atlas** — realtime world-server (TCB): Colyseus 20 Hz authoritative sim, rooms, intents, connect-ticket `onAuth` | **now** |
 | `packages/net-contract` | shared wire contract (`PROTOCOL_VERSION`, intent types) | **now** |
-| `client/phaser/` | throwaway netcode POC — Vite + Phaser + colyseus.js | **now (POC)** |
-| `client/godot/` | Godot 4.5 client — the **Jupiter** SDK (destination client) | later |
+| `client/phaethon/` | throwaway netcode POC — Vite + Phaser + colyseus.js | **now (POC)** |
+| `client/astrolabe/` | Godot 4.5 client — the **Jupiter** SDK (destination client) | later |
 | `services/polaris` | **Polaris** — meta tier (Fastify HTTP): auth, accounts, sessions, connect-ticket; later matchmaking/social | **now** (auth live) |
 | `services/cognition` | LLM gateway (Mercury/Calliope) | later (P2; in-process module until then) |
 | `packages/{ledger,event,authz}-contract` | EconomyService, event registry, `can()` | later (seams) |
 
-`services/` = runnable backend processes · `packages/` = shared libraries you import · `client/phaser/` = the throwaway netcode POC · `client/godot/` = the Godot destination client. See `.context/architecture/modules.md`.
+`services/` = runnable backend processes · `packages/` = shared libraries you import · `client/phaethon/` = the throwaway netcode POC · `client/astrolabe/` = the Godot destination client. See `.context/architecture/modules.md`.
 
 ## Guardrails (NON-NEGOTIABLE — see `.context/architecture/guardrails.md`)
 

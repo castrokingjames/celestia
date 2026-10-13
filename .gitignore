@@ -11,6 +11,6 @@ dist/
 BrowserQuest/
 
 # Godot
-client/godot/.godot/
-client/godot/android/
+client/astrolabe/.godot/
+client/astrolabe/android/
 export_presets.cfg
