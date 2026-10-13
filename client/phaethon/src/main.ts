@@ -15,7 +15,7 @@ const DEMO_USER = (import.meta.env.VITE_DEMO_USER as string) ?? "neo";
 const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-dev";
 const ORIGIN_X = 400, ORIGIN_Y = 300; // center world (0,0) in the 800x600 view
 const DT_MAX = 0.05;
-const INTERP_DELAY_MS = 150; // render remotes this far behind the SERVER clock, between two snapshots (jitter-proof)
+const INTERP_DELAY_MS = 200; // render remotes this far behind the SERVER clock, between two snapshots (jitter buffer)
 
 type Snap = { t: number; x: number; y: number };
 type View = { rect: Phaser.GameObjects.Rectangle; buf: Snap[] };
@@ -31,8 +31,7 @@ function applyCmd(pos: { x: number; y: number }, c: InputCommand): void {
 class ZoneScene extends Phaser.Scene {
   private room!: Room;
   private views = new Map<string, View>(); // OTHER players (interpolated)
-  private serverT = 0;      // latest server clock (state.t) from the most recent patch
-  private serverTLocal = 0; // performance.now() when serverT arrived (to extrapolate the server clock between patches)
+  private clockOffset = NaN; // smoothed estimate of (serverTime − localTime); serverNow ≈ performance.now() + clockOffset
   private selfId = "";
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private status!: Phaser.GameObjects.Text;
@@ -84,8 +83,13 @@ class ZoneScene extends Phaser.Scene {
     // Per-patch (20 Hz): anchor the server clock + append a snapshot for each remote on the SERVER
     // timeline. Fires after the whole patch is applied, so state.t is current.
     this.room.onStateChange((state: any) => {
-      this.serverT = state.t;
-      this.serverTLocal = performance.now();
+      // Track the server clock as a SMOOTHED offset — not a hard re-anchor each patch, which would
+      // re-inject arrival jitter and make the render time jump backward. Snap on first sample / big drift.
+      const target = state.t - performance.now();
+      this.clockOffset =
+        Number.isNaN(this.clockOffset) || Math.abs(target - this.clockOffset) > 500
+          ? target
+          : this.clockOffset + (target - this.clockOffset) * 0.05;
       this.views.forEach((v, id) => {
         const p = state.players.get(id);
         if (!p) return;
@@ -123,8 +127,7 @@ class ZoneScene extends Phaser.Scene {
     // interpolating between the two that bracket that time. The timeline is the server's (not
     // packet-arrival time), so jitter can't make remotes hop — only an underflow (updates stalled
     // past the buffer) briefly holds at the newest.
-    const estServerNow = this.serverT + (performance.now() - this.serverTLocal);
-    const renderT = estServerNow - INTERP_DELAY_MS;
+    const renderT = performance.now() + this.clockOffset - INTERP_DELAY_MS; // NaN until first patch → holds at buf[0]
     this.views.forEach((v) => {
       const buf = v.buf;
       if (buf.length === 0) return;
