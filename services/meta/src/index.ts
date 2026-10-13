@@ -36,7 +36,7 @@ for (const id of config.auth.enabledMethods) {
 
 const app = buildApp({ methods, accounts, sessions });
 app
-  .listen({ port: config.metaPort, host: "0.0.0.0" })
+  .listen({ port: Number(process.env.PORT) || config.metaPort, host: "0.0.0.0" })
   .then((addr) => console.log(`[meta] listening on ${addr}  (methods: ${[...methods.keys()].join(", ")})`))
   .catch((err) => {
     console.error("[meta] failed to start:", err);
