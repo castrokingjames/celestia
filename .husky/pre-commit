@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# Celestia pre-commit. ACTIVATES ONLY after `git init` + `pnpm install` (husky installs the hook via the "prepare" script). Until then this file is inert.
+
+# 1) Lint + typecheck the workspace (fast real signal).
+pnpm turbo run lint typecheck || {
+  echo "✖ lint/typecheck failed — fix before committing."
+  exit 1
+}
+
+# 2) Context-sync gate: if a .context/ rule changed but the generated Copilot summary wasn't
+#    re-generated, it's stale. Block and point to the sync skill.
+if git diff --cached --name-only | grep -q '^\.context/' \
+   && ! git diff --cached --name-only | grep -q '^\.github/copilot-instructions\.md$'; then
+  echo "✖ .context/ changed but .github/copilot-instructions.md was not re-generated."
+  echo "  Run the 'sync-copilot-instructions' skill, then re-stage .github/copilot-instructions.md."
+  exit 1
+fi

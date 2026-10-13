@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# Celestia pre-push. ACTIVATES ONLY after `git init` + `pnpm install`. Until then this file is inert.
+
+# Full test gate before pushing.
+pnpm turbo run test || {
+  echo "✖ tests failed — not pushing."
+  exit 1
+}
