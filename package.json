@@ -9,6 +9,7 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "build-phaethon": "pnpm install --frozen-lockfile --prod=false && pnpm --filter @celestia/phaethon build",
     "infra:up": "docker compose -f docker-compose.infra.yml up -d",
     "infra:down": "docker compose -f docker-compose.infra.yml down",
     "prepare": "husky"
