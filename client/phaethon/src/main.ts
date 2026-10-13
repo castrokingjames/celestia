@@ -15,8 +15,10 @@ const DEMO_USER = (import.meta.env.VITE_DEMO_USER as string) ?? "neo";
 const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-dev";
 const ORIGIN_X = 400, ORIGIN_Y = 300; // center world (0,0) in the 800x600 view
 const DT_MAX = 0.05;
+const INTERP_DELAY_MS = 100; // render remotes this far in the past, between two real snapshots (smooth vs jitter)
 
-type View = { rect: Phaser.GameObjects.Rectangle; tx: number; ty: number };
+type Snap = { t: number; x: number; y: number };
+type View = { rect: Phaser.GameObjects.Rectangle; buf: Snap[] };
 
 function applyCmd(pos: { x: number; y: number }, c: InputCommand): void {
   const len = Math.hypot(c.dx, c.dy);
@@ -67,9 +69,13 @@ class ZoneScene extends Phaser.Scene {
         $(player).onChange(() => this.reconcile(player.x, player.y, player.lastSeq));
       } else {
         const rect = this.add.rectangle(player.x + ORIGIN_X, player.y + ORIGIN_Y, 24, 24, 0x60a5fa);
-        const v: View = { rect, tx: player.x, ty: player.y };
+        const v: View = { rect, buf: [{ t: performance.now(), x: player.x, y: player.y }] };
         this.views.set(id, v);
-        $(player).onChange(() => { v.tx = player.x; v.ty = player.y; });
+        // buffer each authoritative update with its arrival time; update() renders ~INTERP_DELAY_MS behind
+        $(player).onChange(() => {
+          v.buf.push({ t: performance.now(), x: player.x, y: player.y });
+          if (v.buf.length > 30) v.buf.shift();
+        });
       }
     });
     $(this.room.state).players.onRemove((_p: any, id: string) => {
@@ -102,10 +108,30 @@ class ZoneScene extends Phaser.Scene {
     // self rendered at its PREDICTED position (feels instant); corrected invisibly on reconcile
     if (this.selfRect) { this.selfRect.x = this.self.x + ORIGIN_X; this.selfRect.y = this.self.y + ORIGIN_Y; }
 
-    // others INTERPOLATED toward their authoritative server positions
+    // others: SNAPSHOT-BUFFER interpolation — render ~INTERP_DELAY_MS in the past, between the two
+    // buffered authoritative snapshots that bracket that render time. Smooth under jitter, unlike a
+    // lerp-toward-latest (which hops when 20 Hz patches arrive bursty over the internet).
+    const renderT = performance.now() - INTERP_DELAY_MS;
     this.views.forEach((v) => {
-      v.rect.x += (v.tx + ORIGIN_X - v.rect.x) * 0.2;
-      v.rect.y += (v.ty + ORIGIN_Y - v.rect.y) * 0.2;
+      const buf = v.buf;
+      let x = buf[0].x;
+      let y = buf[0].y;
+      if (renderT >= buf[buf.length - 1].t) {
+        const last = buf[buf.length - 1]; // updates stalled past the delay → hold at newest (no extrapolation)
+        x = last.x;
+        y = last.y;
+      } else if (renderT > buf[0].t) {
+        let i = 0;
+        while (i < buf.length - 1 && buf[i + 1].t < renderT) i++;
+        const a = buf[i];
+        const b = buf[i + 1];
+        const f = (renderT - a.t) / (b.t - a.t || 1);
+        x = a.x + (b.x - a.x) * f;
+        y = a.y + (b.y - a.y) * f;
+      }
+      v.rect.x = x + ORIGIN_X;
+      v.rect.y = y + ORIGIN_Y;
+      while (buf.length > 2 && buf[1].t < renderT) buf.shift(); // drop consumed snapshots, keep one before renderT
     });
   }
 
