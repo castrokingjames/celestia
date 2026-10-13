@@ -1,0 +1,14 @@
+; Celestia client — Godot 4.5, Compatibility (WebGL2). Scaffold.
+config_version=5
+
+[application]
+config/name="Celestia"
+run/main_scene="res://game/boot.tscn"
+config/features=PackedStringArray("4.5", "GL Compatibility")
+
+[autoload]
+Jupiter="*res://addons/jupiter/jupiter.gd"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
