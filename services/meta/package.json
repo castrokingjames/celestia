@@ -1,0 +1,29 @@
+{
+  "name": "@celestia/meta",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "node --env-file=../../.env --watch --import tsx src/index.ts",
+    "start": "node --env-file=../../.env dist/index.js",
+    "migrate": "node --env-file=../../.env --import tsx src/db/migrate.ts",
+    "gen-dev-keys": "node --import tsx scripts/gen-dev-keys.ts",
+    "test": "node --env-file=../../.env --import tsx --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@celestia/net-contract": "workspace:*",
+    "fastify": "^5.1.0",
+    "jose": "^5.9.0",
+    "kysely": "^0.27.4",
+    "pg": "^8.13.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
