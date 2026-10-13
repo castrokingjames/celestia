@@ -15,7 +15,7 @@ const DEMO_USER = (import.meta.env.VITE_DEMO_USER as string) ?? "neo";
 const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-dev";
 const ORIGIN_X = 400, ORIGIN_Y = 300; // center world (0,0) in the 800x600 view
 const DT_MAX = 0.05;
-const INTERP_DELAY_MS = 200; // render remotes this far behind the SERVER clock, between two snapshots (jitter buffer)
+const INTERP_DELAY_MS = 300; // render remotes this far behind the SERVER clock, between two snapshots (jitter buffer)
 
 type Snap = { t: number; x: number; y: number };
 type View = { rect: Phaser.GameObjects.Rectangle; buf: Snap[] };
