@@ -2,15 +2,16 @@
 // Throwaway harness to iron out movement → interactions → interp/sync/reconciliation (docs/REALTIME.md §3),
 // then rebuild on Godot. Shares the SAME wire contract as the server (no codegen — TS↔TS).
 //
-// P1 netcode: SELF is client-predicted + server-reconciled (snap to authoritative + replay un-acked
-// commands); OTHERS are entity-interpolated toward their authoritative server positions.
+// Flow (session-first, docs/CHARACTERS.md): login → bound session (Polaris) → create/select a character →
+// play.enter → connect Atlas with the one-time zone ticket. P1 netcode: SELF is client-predicted +
+// server-reconciled; OTHERS are entity-interpolated on the server clock.
 import Phaser from "phaser";
 import { Client, getStateCallbacks, type Room } from "colyseus.js";
-import { PROTOCOL_VERSION, MOVE_SPEED, type InputCommand } from "@celestia/net-contract";
-import { CelestiaAuth } from "./sdk/auth.js";
+import { PROTOCOL_VERSION, MOVE_SPEED, type InputCommand } from "@celestia/norma";
+import { login, SessionConnection, type PlayEnterResult, type SessionStateMsg } from "./sdk/session.js";
 
-const ENDPOINT = (import.meta.env.VITE_ENDPOINT as string) ?? "ws://127.0.0.1:2567";
-const META_URL = (import.meta.env.VITE_META_URL as string) ?? "http://127.0.0.1:3000";
+const POLARIS_URL = (import.meta.env.VITE_POLARIS_URL as string) ?? "http://127.0.0.1:3000";
+const POLARIS_WS = POLARIS_URL.replace(/^http/, "ws"); // session gateway shares Polaris's port
 const DEMO_USER = (import.meta.env.VITE_DEMO_USER as string) ?? "neo";
 const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-dev";
 const ORIGIN_X = 400, ORIGIN_Y = 300; // center world (0,0) in the 800x600 view
@@ -19,7 +20,7 @@ const INTERP_DELAY_MS = 300; // render remotes this far behind the SERVER clock,
 const EXTRAP_MAX_MS = 150;   // on buffer underflow (server stalled), extrapolate last velocity up to this, then hold
 
 type Snap = { t: number; x: number; y: number };
-type View = { rect: Phaser.GameObjects.Rectangle; buf: Snap[] };
+type View = { rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text; buf: Snap[] };
 
 function applyCmd(pos: { x: number; y: number }, c: InputCommand): void {
   const len = Math.hypot(c.dx, c.dy);
@@ -39,6 +40,7 @@ class ZoneScene extends Phaser.Scene {
 
   // self prediction state
   private selfRect?: Phaser.GameObjects.Rectangle;
+  private selfLabel?: Phaser.GameObjects.Text;
   private self = { x: 0, y: 0 };      // predicted position
   private seq = 0;
   private pending: InputCommand[] = []; // commands sent but not yet acked by the server
@@ -46,38 +48,52 @@ class ZoneScene extends Phaser.Scene {
   constructor() { super("zone"); }
 
   create() {
-    this.status = this.add.text(8, 8, "connecting…", { color: "#9ca3af", fontSize: "14px" });
+    this.status = this.add.text(8, 8, "logging in…", { color: "#9ca3af", fontSize: "14px" });
     this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,LEFT,DOWN,RIGHT") as Record<string, Phaser.Input.Keyboard.Key>;
     void this.connect();
   }
 
+  private label(name: string, color: string): Phaser.GameObjects.Text {
+    return this.add.text(0, 0, name || "…", { color, fontSize: "11px" }).setOrigin(0.5, 1);
+  }
+
   private async connect() {
-    const client = new Client(ENDPOINT);
-    // Auth first (via our SDK, not raw HTTP): log in -> one-time connect-ticket -> join with it.
-    // The realtime server rejects joins without a valid ticket. POC uses hardcoded creds here;
-    // a real login screen replaces this later.
-    const auth = new CelestiaAuth(META_URL);
-    await auth.login(DEMO_USER, DEMO_SECRET);
-    const ticket = await auth.connectTicket();
-    this.room = await client.joinOrCreate("zone", { protocolVersion: PROTOCOL_VERSION, ticket });
+    // Session-first: login → bound session → create a character if none → play.enter → zone ticket.
+    const { sessionTicket } = await login(POLARIS_URL, DEMO_USER, DEMO_SECRET);
+    const session = new SessionConnection(POLARIS_WS, sessionTicket);
+    await session.ready();
+    this.status.setText("choosing character…");
+    const enter: PlayEnterResult = await new Promise((resolve) => {
+      session.onState((state: SessionStateMsg) => {
+        if (state.characters.length === 0) session.create(`Hero_${Math.random().toString(36).slice(2, 7)}`);
+        else void session.enter(state.characters[0].id).then(resolve);
+      });
+    });
+    session.close();
+
+    // Connect to the resolved zone with the one-time zone ticket (Atlas rejects joins without it).
+    const client = new Client(enter.realtimeUrl);
+    this.room = await client.joinOrCreate("zone", { protocolVersion: PROTOCOL_VERSION, ticket: enter.zoneTicket });
     this.selfId = this.room.sessionId;
-    this.status.setText(`connected · ${this.selfId}  (green=you, predicted · blue=others, interpolated)`);
+    this.status.setText(`in ${enter.zoneId} · ${this.selfId}  (green=you · blue=others)`);
 
     const $ = getStateCallbacks(this.room);
     $(this.room.state).players.onAdd((player: any, id: string) => {
       if (id === this.selfId) {
         this.self = { x: player.x, y: player.y };
         this.selfRect = this.add.rectangle(this.self.x + ORIGIN_X, this.self.y + ORIGIN_Y, 24, 24, 0x4ade80);
+        this.selfLabel = this.label(player.name, "#4ade80");
         $(player).onChange(() => this.reconcile(player.x, player.y, player.lastSeq));
       } else {
         const rect = this.add.rectangle(player.x + ORIGIN_X, player.y + ORIGIN_Y, 24, 24, 0x60a5fa);
-        this.views.set(id, { rect, buf: [] });
-        // remote snapshots are sampled per-patch on the SERVER clock in room.onStateChange (below),
-        // not here — so the interpolation timeline is the server's, immune to packet-arrival jitter.
+        this.views.set(id, { rect, label: this.label(player.name, "#60a5fa"), buf: [] });
+        // remote snapshots are sampled per-patch on the SERVER clock in room.onStateChange (below).
       }
     });
     $(this.room.state).players.onRemove((_p: any, id: string) => {
-      this.views.get(id)?.rect.destroy();
+      const v = this.views.get(id);
+      v?.rect.destroy();
+      v?.label.destroy();
       this.views.delete(id);
     });
 
@@ -123,6 +139,7 @@ class ZoneScene extends Phaser.Scene {
 
     // self rendered at its PREDICTED position (feels instant); corrected invisibly on reconcile
     if (this.selfRect) { this.selfRect.x = this.self.x + ORIGIN_X; this.selfRect.y = this.self.y + ORIGIN_Y; }
+    if (this.selfLabel) { this.selfLabel.x = this.self.x + ORIGIN_X; this.selfLabel.y = this.self.y + ORIGIN_Y - 16; }
 
     // others: play buffered snapshots back on the SERVER clock, rendered INTERP_DELAY_MS behind,
     // interpolating between the two that bracket that time. The timeline is the server's (not
@@ -159,6 +176,8 @@ class ZoneScene extends Phaser.Scene {
       }
       v.rect.x = x + ORIGIN_X;
       v.rect.y = y + ORIGIN_Y;
+      v.label.x = x + ORIGIN_X;
+      v.label.y = y + ORIGIN_Y - 16;
       while (buf.length > 2 && buf[1].t < renderT) buf.shift(); // drop consumed snapshots, keep one before renderT
     });
   }
