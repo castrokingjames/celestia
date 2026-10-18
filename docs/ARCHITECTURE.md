@@ -58,7 +58,7 @@ Godot        NestJS         Redis        Colyseus room(zone)     Cognition GW   
 | Component | Stack piece | Single responsibility | Owns (authoritative) | Does NOT |
 |---|---|---|---|---|
 | **Game client** | Godot 4 | Render, input, interpolation, token custody, connection UI | Access token (RAM), refresh token (encrypted at rest) | Decide anything; hold authoritative state; call a model |
-| **Meta API** | NestJS | Auth/account authority, matchmaking policy, inventory/economy custody *at rest*, admin/moderation, GDPR | `authz.*`, zone-assignment policy, the ban/erasure authority | Host rooms; hold hot sim state; verify in the hot loop |
+| **Polaris** | NestJS | Auth/account authority, matchmaking policy, inventory/economy custody *at rest*, admin/moderation, GDPR | `authz.*`, zone-assignment policy, the ban/erasure authority | Host rooms; hold hot sim state; verify in the hot loop |
 | **Zone room** | Colyseus | Authoritative in-session simulation of one village; the TCB | SHARED-sim RAM state, intent validation, event `seq` assignment | Be durable truth; call a model directly |
 | **Cognition Gateway** | cognition svc (Node) | Batch/route/cache every model call; RAG assembly | Model endpoints, batch scheduler, decision cache | Write game state; be inside the TCB; be handed a client-supplied `player_id` |
 | **Mica-4B (S1)** | cognition svc (GPU) | Typed calibrated decision over a sim-authored enum | Nothing (stateless oracle) | Emit text; write state |

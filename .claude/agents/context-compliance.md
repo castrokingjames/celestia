@@ -13,7 +13,7 @@ The current diff (`git diff --name-only HEAD` + untracked), or explicit files. O
 
 ## Checks (cite the `.context` doc)
 
-- **Magic values** (`formatting.md`) — unnamed domain numbers / bare string literals; wire strings (intent types, protocol version, reason codes) hand-typed instead of sourced from `@celestia/net-contract`; tunables (tick rate, speeds, thresholds) inline instead of config.
+- **Magic values** (`formatting.md`) — unnamed domain numbers / bare string literals; wire strings (intent types, protocol version, reason codes) hand-typed instead of sourced from `@celestia/norma`; tunables (tick rate, speeds, thresholds) inline instead of config.
 - **Placement** (`organization.md`) — logic shared by ≥2 services not extracted to a `package/`; a service with more than its launcher in `index.ts`; a concrete adapter named outside the composition root; wire constants duplicated across places.
 - **Naming** (`organization.md`) — TS `PascalCase`/`camelCase`/`SCREAMING_SNAKE`/`kebab` filenames; role-named services; `@celestia/<kebab>` packages; GDScript `snake_case`/`PascalCase class_name`.
 - **TS hygiene** (`formatting.md`) — relative imports missing the `.js` NodeNext extension; `any` or `@ts-ignore`/`@ts-expect-error` without a one-line justification; `number` used for money.

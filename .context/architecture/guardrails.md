@@ -8,7 +8,7 @@ Intents carry **indices / typed args / ids only — NEVER amounts, prices, balan
 
 ### G2 — The LLM never writes state
 The model **proposes within sim-authored bounds** (an index into an enumerated set, or a draft over a vetted DSL); the deterministic TCB validates and owns truth. It never mints currency, fires an unvalidated event, grants an arbitrary reward, or is assembled into an Actor. Its output is UNTRUSTED and re-enters the same intent pipeline.
-*Comply:* cognition returns a proposal; the room re-validates (`can()` → re-`enumerate()` → execute). Cognition holds zero grant on `ledger.*`.
+*Comply:* cognition returns a proposal; the room re-validates (`allow()` → re-`enumerate()` → execute). Cognition holds zero grant on `ledger.*`.
 
 ### G3 — Engine ↛ game module
 Genre-neutral engine packages must **never** import a game module (e.g. `@celestia/game-cozy`). Reuse = a new module + its own deployment, never an engine fork.
@@ -22,9 +22,9 @@ Mutations are append-only events in `log.event` (seq + prev_hash chain; `UPDATE`
 All value moves through the single `EconomyService`. Integer money only (`NUMERIC(38,0)` at rest / `bigint` in process / decimal-string on wire). It is the **only** emitter of `economy.posted@N`; idempotency key → same receipt on replay.
 *Comply:* no code computes or writes a balance except via `EconomyService`.
 
-### G6 — `can()` deny-by-default
-Every mutating intent passes `can(actor, action, resource, ctx)` **before** `enumerate`/`execute`, re-run on NPC/System-2 apply. `resolveResource` reads scope/owner from **authoritative room/DB state**, never the client envelope. Default → deny.
-*Comply:* no mutation path skips `can()`; unknown action/slug → deny.
+### G6 — `allow()` deny-by-default
+Every mutating intent passes `allow(actor, action, resource, ctx)` **before** `enumerate`/`execute`, re-run on NPC/System-2 apply. `resolveResource` reads scope/owner from **authoritative room/DB state**, never the client envelope. Default → deny.
+*Comply:* no mutation path skips `allow()`; unknown action/slug → deny.
 
 ### G7 — Ports/adapters
 Only the composition root (server) / `Jupiter` (client) names a concrete adapter class. Callers depend on the port (interface), never a concrete. Swapping an adapter changes one wiring line, not call sites.
@@ -37,8 +37,8 @@ No tokens, keys, or credentials in source — ever. Config via env (`@celestia/c
 Fixed-timestep sim; seeded RNG from `event.seed`; no `Date.now()`/wall-clock inside reducers or sim logic. Replay must be byte-identical.
 
 ### G10 — Naming / structure
-`services/` (not `apps/`), never a redundant `-server` suffix. Services are named by their **celestial codename** (see `docs/NAMING.md`): `atlas` (the realtime world-server/TCB), `polaris` (the meta/accounts/auth tier), cognition later (`mercury`/`calliope`). Role words ("realtime", "meta") describe a service's *function* in prose; the directory and package name are the codename (`services/atlas`, `@celestia/atlas`). Shared leaf packages stay descriptive (`@celestia/net-contract`).
+`services/` (not `apps/`), never a redundant `-server` suffix. Services are named by their **celestial codename** (see `docs/NAMING.md`): `atlas` (the realtime world-server/TCB), `polaris` (the accounts/auth tier), cognition later (`mercury`/`calliope`). Role words (like "realtime") describe a service's *function* in prose; the directory and package name are the codename (`services/atlas`, `@celestia/atlas`). Shared leaf packages stay descriptive (`@celestia/norma`).
 
 ### G11 — Client never sets its own privilege
-Identity, role, and entitlement are **server-assigned state** — never values the client supplies. An auth/login request carries a *credential to be verified*, never a requested role, tier, or permission. Every account lands at the baseline tier (`terra`) on login; elevation happens **only** through an authorized, audited admin action by an already-privileged principal — or a server-local bootstrap that requires shell/DB access to the box — **never** self-service. **Gating *whether* a session is issued is not granting *what* it may do:** a shared/shareable secret (e.g. `BASIC_AUTH_SECRET`) may gate access to a login method, but no secret, anywhere, ever grants a role — the instant a credential that elevates can be forwarded to someone else, privilege has leaked. `can()` derives the actor's authority from authoritative state (`account.role`), not from the request envelope or a client-asserted claim; the `role` in a JWT is a server-minted mirror of that state, never an input. (Sharpens G1 + G6 for the identity/role axis, and spans the auth boundary they don't.)
+Identity, role, and entitlement are **server-assigned state** — never values the client supplies. An auth/login request carries a *credential to be verified*, never a requested role, tier, or permission. Every account lands at the baseline tier (`terra`) on login; elevation happens **only** through an authorized, audited admin action by an already-privileged principal — or a server-local bootstrap that requires shell/DB access to the box — **never** self-service. **Gating *whether* a session is issued is not granting *what* it may do:** a shared/shareable secret (e.g. `BASIC_AUTH_SECRET`) may gate access to a login method, but no secret, anywhere, ever grants a role — the instant a credential that elevates can be forwarded to someone else, privilege has leaked. `allow()` derives the actor's authority from authoritative state (`account.role`), not from the request envelope or a client-asserted claim; the `role` in a JWT is a server-minted mirror of that state, never an input. (Sharpens G1 + G6 for the identity/role axis, and spans the auth boundary they don't.)
 *Comply:* no auth/login/intent payload is ever read to set role/privilege/tier; a `role`/`tier`/`isAdmin`-style field on a request body is ignored and is a finding. Role changes go through the audited admin path only; grep for role being written from anything client-derived → a leak.

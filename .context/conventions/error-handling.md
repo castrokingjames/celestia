@@ -2,14 +2,14 @@
 
 ## Server (authoritative)
 
-- **Validate, then act.** An intent that fails `can()` / `enumerate()` is **rejected with a typed reason code** (closed union, from `net-contract`) — never silently dropped, never a bare `-1`. The client gets `intent_rejected(seq, type, reason)`.
+- **Validate, then act.** An intent that fails `allow()` / `enumerate()` is **rejected with a typed reason code** (closed union, from `norma`) — never silently dropped, never a bare `-1`. The client gets `intent_rejected(seq, type, reason)`.
 - **Deny-by-default (G6).** Unknown action, unknown slug, missing resource, insufficient balance → a deterministic typed refusal. Insufficient-balance refusal is deterministic, not a throw-and-hope.
 - **Fail closed on cognition.** Deadline / breaker / out-of-range index / stale `cid` / low confidence → **abstain → scripted fallback** (G2). The tick never stalls waiting on the model.
 - **No partial writes.** A mutation is one event appended atomically (reserve → execute → fenced append → ack). On failure, nothing is written.
 
 ## Reason codes
 
-Closed, versioned unions in `net-contract` — one spelling per reason, no `not_in_alpha`/`no_alpha` splits. New reason → add to the union, regenerate the client contract.
+Closed, versioned unions in `norma` — one spelling per reason, no `not_in_alpha`/`no_alpha` splits. New reason → add to the union, regenerate the client contract.
 
 ## Logging
 

@@ -12,7 +12,7 @@ Monorepo: **pnpm + Turborepo**, **Node 22**, **TypeScript 5.7**.
 
 ```bash
 pnpm install                                   # (pnpm comes via corepack if not on PATH)
-pnpm infra:up                                  # Postgres(+Valkey) via docker compose
+pnpm gaia:up                                  # Postgres(+Valkey) via docker compose
 pnpm --filter @celestia/atlas dev           # 20 Hz zone server on :2567 (GET /health)
 pnpm build | pnpm typecheck | pnpm lint | pnpm test   # turbo across the workspace
 ```
@@ -23,13 +23,14 @@ If `turbo` can't find the pnpm binary, run `corepack enable` first (puts pnpm on
 
 | Path | What | Status |
 |---|---|---|
-| `services/atlas` | **Atlas** — realtime world-server (TCB): Colyseus 20 Hz authoritative sim, rooms, intents, connect-ticket `onAuth` | **now** |
-| `packages/net-contract` | shared wire contract (`PROTOCOL_VERSION`, intent types) | **now** |
+| `services/atlas` | **Atlas** — realtime world-server (TCB): **NestJS app hosting Colyseus**, 20 Hz authoritative sim, rooms, intents. Verifies the access badge offline; hosts the **Janus** lobby (badge auth · character select · zone entry) + the zone sim. | **now** |
+| `packages/norma` | shared wire contract (`PROTOCOL_VERSION`, intent types) | **now** |
 | `client/phaethon/` | throwaway netcode POC — Vite + Phaser + colyseus.js | **now (POC)** |
 | `client/astrolabe/` | Godot 4.5 client — the **Jupiter** SDK (destination client) | later |
-| `services/polaris` | **Polaris** — meta tier (Fastify HTTP): auth, accounts, sessions, connect-ticket; later matchmaking/social | **now** (auth live) |
+| `services/polaris` | **Polaris** — the help desk (**NestJS**, pure HTTP): authentication + authority (roles/bans/entitlements), signs the one-time access badge. No WS, no game data (character select + zone entry moved to the Atlas **Janus** lobby). | **now** (auth live) |
+| `packages/firmament` | shared **NestJS** building blocks (Config/Database/Ticket modules) imported by every service | **now** (extracting) |
 | `services/cognition` | LLM gateway (Mercury/Calliope) | later (P2; in-process module until then) |
-| `packages/{ledger,event,authz}-contract` | EconomyService, event registry, `can()` | later (seams) |
+| `packages/{ledger,event,authz}-contract` | EconomyService, event registry, `allow()` | later (seams) |
 
 `services/` = runnable backend processes · `packages/` = shared libraries you import · `client/phaethon/` = the throwaway netcode POC · `client/astrolabe/` = the Godot destination client. See `.context/architecture/modules.md`.
 
@@ -40,12 +41,12 @@ If `turbo` can't find the pnpm binary, run `corepack enable` first (puts pnpm on
 3. **Engine ↛ game module.** Genre-neutral engine packages must **never** import a game module (e.g. `game-cozy`). Enforced by an arch-test.
 4. **Event-sourced truth.** Mutations are append-only events in `log.event` (seq + prev_hash, `UPDATE`/`DELETE` revoked). Replay reads logged oracle outputs; it never re-infers.
 5. **One `EconomyService` chokepoint.** All value moves through it; integer money (`NUMERIC(38,0)` / `bigint`); it is the only emitter of `economy.posted`.
-6. **`can()` deny-by-default.** Every mutating intent passes `can()` *before* enumerate/execute; `resolveResource` reads scope/owner from authoritative state, **never** from the client envelope.
+6. **`allow()` deny-by-default.** Every mutating intent passes `allow()` *before* enumerate/execute; `resolveResource` reads scope/owner from authoritative state, **never** from the client envelope.
 7. **Ports/adapters.** Only the composition root (server) / `Jupiter` (client) names a concrete adapter class. Callers depend on the port, never a concrete.
 8. **No secrets in code.** Ever. Config via env.
 9. **Determinism.** Fixed-timestep sim, seeded RNG, no wall-clock inside reducers.
-10. **Naming/structure.** `services/` (not `apps/`), never a `-server` suffix. Services are named by their **celestial codename** (`docs/NAMING.md`): `atlas` (world-server), `polaris` (meta), cognition later (`mercury`/`calliope`). "realtime"/"meta" are *function* words in prose; the dir/package IS the codename (`services/atlas`, `@celestia/atlas`).
-11. **Client never sets its own privilege.** Identity/role/entitlement are **server-assigned** — an auth/login request carries a credential to verify, never a requested role. Everyone lands at baseline (`terra`); elevation only via an audited admin action by an already-privileged principal (or server-local bootstrap), never self-service. Gating a session (a shared secret like `BASIC_AUTH_SECRET`) ≠ granting a role; **no shareable secret ever grants privilege.** `can()` reads authority from authoritative state, never a client-asserted `role`/claim.
+10. **Naming/structure.** `services/` (not `apps/`), never a `-server` suffix. Services are named by their **celestial codename** (`docs/NAMING.md`): `atlas` (world-server), `polaris` (accounts/auth), cognition later (`mercury`/`calliope`). "realtime" is a *function* word in prose; the dir/package IS the codename (`services/atlas`, `@celestia/atlas`).
+11. **Client never sets its own privilege.** Identity/role/entitlement are **server-assigned** — an auth/login request carries a credential to verify, never a requested role. Everyone lands at baseline (`terra`); elevation only via an audited admin action by an already-privileged principal (or server-local bootstrap), never self-service. Gating a session (a shared secret like `BASIC_AUTH_SECRET`) ≠ granting a role; **no shareable secret ever grants privilege.** `allow()` reads authority from authoritative state, never a client-asserted `role`/claim.
 
 ## Working principles
 
@@ -81,6 +82,10 @@ If `turbo` can't find the pnpm binary, run `corepack enable` first (puts pnpm on
 | engine vs game-module boundary | `docs/PLATFORM.md` + `.context/architecture/modules.md` |
 | the Godot client (Jupiter) | `docs/CLIENT-SDK.md` |
 | auth / authz | `docs/AUTH.md`, `docs/AUTHZ.md` |
+| in-game action pipeline · access model (help-desk/game split · one-writer-per-table · `enumerate→allow→qualify→execute`) | `docs/PIPELINE.md` |
+| the near-term build sequence (S1 help-desk refactor → S2 Caelum config loader → S3 action-pipeline module) | `docs/REFACTOR.md` |
+| post-login flow / characters / zone entry | `docs/CHARACTERS.md` |
+| login-flow families · worlds/realms · World→Zone→Channel→Sector topology (tick & events per level) | `docs/WORLDS.md` |
 | LLM behavior / economy / events / quests | `docs/COGNITION.md` |
 | the LLM/vector decision mechanism | `docs/DECISIONS.md` |
 | web3 / tokens | `docs/WEB3.md`, `docs/WEB3-READINESS.md` |

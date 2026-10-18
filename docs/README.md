@@ -20,7 +20,7 @@ All design docs for Celestia (real-time MMO + reusable multi-game engine). Where
 
 ## Auth & Authz
 - [AUTH.md](./AUTH.md) — authentication spec (Discord OAuth, JWT, tickets, dev/tester path).
-- [AUTHZ.md](./AUTHZ.md) — authorization: 3 layers, the one `can()` chokepoint, sanctions.
+- [AUTHZ.md](./AUTHZ.md) — authorization: 3 layers, the one `allow()` chokepoint, sanctions.
 
 ## Cognition (LLM) & decisions
 - [COGNITION.md](./COGNITION.md) — how the LLM integrates across behavior/economy/events/quests.
@@ -31,5 +31,5 @@ All design docs for Celestia (real-time MMO + reusable multi-game engine). Where
 - [WEB3-READINESS.md](./WEB3-READINESS.md) — bake-in-now vs defer seams.
 
 ## Meta
-- [NAMING.md](./NAMING.md) — codename menu + locks: SDK **Jupiter** · services **Atlas** (world) / **Polaris** (meta) · clients **Astrolabe** (Godot) / **Phaethon** (Phaser POC).
+- [NAMING.md](./NAMING.md) — codename menu + locks: SDK **Jupiter** · services **Atlas** (world) / **Polaris** (accounts) · clients **Astrolabe** (Godot) / **Phaethon** (Phaser POC).
 - [OPEN-QUESTIONS.md](./OPEN-QUESTIONS.md) — parking lot for unresolved / needs-analysis items.

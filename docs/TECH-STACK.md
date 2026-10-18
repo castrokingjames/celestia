@@ -27,7 +27,7 @@
 
 ## 1. Overview + End-to-End Wire Map
 
-Celestia is a thin-client, intents-only cozy MMO: a Godot WEB export (the flagship runtime, also the Telegram Mini App and iOS path) renders and interpolates; a single-threaded Colyseus room per village holds authoritative sim state and is the Trusted Compute Base (TCB); a NestJS meta backend owns accounts/auth/economy-at-rest; PostgreSQL is the append-only source of truth with pgvector for RAG; Redis/Valkey is ephemeral; and all model calls pass through one Cognition Gateway (never game code → model directly). The deliberate choice is **three serialization formats by hop** — binary `@colyseus/schema` on the hot state path, JSON everywhere human-facing, a frozen proto-typed *frame* for cognition — not one-format-everywhere, because the client edge needs browser-native reach while the state hop needs mobile-bandwidth deltas.
+Celestia is a thin-client, intents-only cozy MMO: a Godot WEB export (the flagship runtime, also the Telegram Mini App and iOS path) renders and interpolates; a single-threaded Colyseus room per village holds authoritative sim state and is the Trusted Compute Base (TCB); a NestJS Polaris backend owns accounts/auth/economy-at-rest; PostgreSQL is the append-only source of truth with pgvector for RAG; Redis/Valkey is ephemeral; and all model calls pass through one Cognition Gateway (never game code → model directly). The deliberate choice is **three serialization formats by hop** — binary `@colyseus/schema` on the hot state path, JSON everywhere human-facing, a frozen proto-typed *frame* for cognition — not one-format-everywhere, because the client edge needs browser-native reach while the state hop needs mobile-bandwidth deltas.
 
 **Wire map** (protocol / serialization per hop; `[P0]` = exists in Phase 0, `[P1]`/`[P2]` = later):
 
@@ -46,7 +46,7 @@ Celestia is a thin-client, intents-only cozy MMO: a Godot WEB export (the flagsh
           │                                │ dialogue tokens (in)   │  for bearer   [P1 — no login P0]
           ▼                                ▼                        ▼
   ┌─────────────────────────────┐                      ┌──────────────────────────┐
-  │ COLYSEUS zone-room (TCB)     │   HMAC-HTTPS/JSON     │ NestJS meta-api          │
+  │ COLYSEUS zone-room (TCB)     │   HMAC-HTTPS/JSON     │ NestJS Polaris           │
   │ Node 22, single-thread/room │◄──/internal/reserve──►│ auth · accounts ·        │
   │ onAuth: jose JWKS verify +  │   [P1]                 │ matchmaking · economy ·  │
   │ GETDEL connect:<ticket>     │   Redis pub/sub +      │ moderation   [P1]        │
@@ -124,7 +124,7 @@ Celestia is a thin-client, intents-only cozy MMO: a Godot WEB export (the flagsh
 | Runtime / language | **Node 22 LTS + TypeScript 5.7**, SWC transpile for apps | Broad lib support (Nest 11, Colyseus 0.16); SWC emits DI/decorator metadata correctly | Node 24 + TS 7 (preview decorators) | P0 |
 | Monorepo | **pnpm 10 workspaces + Turborepo 2.3** | Strict, cached, fits many small `@celestia/*` | Nx (heavier) | P0 |
 | Lib build | **tsup 8.5** → ESM+CJS+`.d.ts` | Consumable by CJS Nest and ESM-leaning deps; correct `exports` map | project refs | P0 |
-| Meta backend | **NestJS 11 on Fastify** | Matches stack; feature modules map 1:1 to ARCH components; **NO `@nestjs/cqrs`** (event-sourcing lives in log.event + reducer) | Express micro | **P1** |
+| Polaris | **NestJS 10 (Express adapter) + ws gateway** | HTTP auth handoff + the WS session gateway; feature modules map 1:1 to ARCH components; DI everywhere; **NO `@nestjs/cqrs`** (event-sourcing lives in log.event + reducer); runs on `tsx` (no compile — shared `@celestia/firmament` compiles) | — | **as built (P1.5)** |
 | Validation | **Zod 4 + nestjs-zod 5** | One schema = runtime validator + inferred type, shareable in `@celestia/*` | class-validator (can't leave Nest) | P0 (lib), P1 (Nest pipe) |
 | Realtime | **Colyseus 0.16.x**, `@colyseus/ws-transport`, **LocalPresence/LocalDriver** | Single process in P0; room imports ledger/event/net-schema/auth directly | always-Redis driver | P0 |
 | JWT/crypto | **jose 6** (EdDSA/Ed25519 sign; `createRemoteJWKSet` offline verify), algs pinned `['EdDSA']` | Correct, dependency-light; lives in `@celestia/auth-contract` so issuer/verifier can't drift | jsonwebtoken | contract stub P0, issuer P1 |
@@ -166,7 +166,7 @@ Celestia is a thin-client, intents-only cozy MMO: a Godot WEB export (the flagsh
 
 | Concern | PICK | Why | Alternative | When |
 |---|---|---|---|---|
-| Daily loop | **docker-compose.infra.yml** (pg+valkey+mica-mock+system2-mock) + app code on host via `turbo run dev` | Fastest hot-reload loop | everything-in-compose (kills hot-reload) | P0 |
+| Daily loop | **docker-compose.gaia.yml** (pg+valkey+mica-mock+system2-mock) + app code on host via `turbo run dev` | Fastest hot-reload loop | everything-in-compose (kills hot-reload) | P0 |
 | Mica on Mac | **mica-mock is DEFAULT**; real llama.cpp only via compose `gpu` profile on the NVIDIA box | Apple Silicon can't pass a GPU into Linux containers | CPU llama.cpp (too slow) | P0 |
 | Migrations | **dbmate one-shot service** gating app start | Same in dev + CI | ORM migrate | P0 |
 | TS tests | **Vitest 3** repo-wide + **`@colyseus/testing`** | Fast ESM/TS-native; official room harness | Jest | P0 |
@@ -238,7 +238,7 @@ The smallest set to build the single-NPC slice end to end. Phase 0 is the **offl
 
 | Deferred | Phase | Trigger |
 |---|---|---|
-| NestJS meta backend (Fastify, feature modules, nestjs-zod pipe, swagger) | **P1** | Need accounts/multiplayer matchmaking |
+| NestJS Polaris backend (Express adapter, feature modules, DI, ws session gateway) | **as built (P1.5)** | accounts + characters + matchmaking live |
 | Full auth path (Discord OAuth, discord.js gateway bot, JWKS offline verify, connect-ticket, joinById({token,ticket}), refresh cookies, protocolVersion-at-onAuth) | **P1** | Leaving the no-login sandbox |
 | StateView / 16×16 per-client AoI filtering | **P1** | More than one client per room |
 | Embedding model (nomic) + outbox embed worker + **HNSW/ANN index** | **P1** | Semantic recall beyond "recalls yesterday's gift"; then index at a named live-vector-count / filtered-p99 / recall@k metric |

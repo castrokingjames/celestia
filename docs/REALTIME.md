@@ -82,7 +82,7 @@ So **20→40 Hz ≈ 2× per-player cost → ~half the CCU per box.** Tick is a *
 ## 5. Spatial topology — World > Zone > Sector (+ Channel, Instance)
 
 ```
-World                 the whole game (meta-layer + Postgres — durable identity/economy; NOT a room)
+World                 the whole game (Polaris + Postgres — durable identity/economy; NOT a room)
  └─ Zone              a logical map — "Prontera", "Prontera-field"  — the ISOLATION BOUNDARY
      └─ Channel       a capped parallel COPY of the zone for capacity — "Prontera-Ch3"
          └─ Sector    AoI granularity inside a channel (any shape — grid/quadtree/hex; just a spatial index)
@@ -92,7 +92,7 @@ Instance             a special/private ephemeral room — special dungeon, priva
 
 | Level | What it is | Backed by | Boundary meaning |
 |---|---|---|---|
-| **World** | entire game; sum of all zones | meta-server + Postgres (not a room) | durable self spans it |
+| **World** | entire game; sum of all zones | Polaris + Postgres (not a room) | durable self spans it |
 | **Zone** | a discrete self-contained map | a room (or channels / an instance) | **isolation** — zones share no real-time state; crossing = handoff |
 | **Channel** | a capped running copy of a zone (`Prontera-Ch3`) | one Colyseus room (one thread) | **capacity + distribution** — group-aware; 1..N per zone |
 | **Sector** | AoI subdivision inside a channel | spatial index (or chunk-room in the hub) | **AoI** — you only exchange updates with nearby Sectors |
@@ -131,24 +131,24 @@ Two **orthogonal** axes (don't confuse with the subdivision): **Channel** = pers
 |---|---|---|
 | **Room memory** (Colyseus) | the **live authoritative working copy** — serves all online reads | ephemeral (while the room lives) |
 | **Postgres** | the **durable source of truth** + global systems (accounts, inventory, COIN, event log) | permanent |
-| **Redis/Valkey** | **cross-process hot layer** — handoff, meta-server reads, write-behind, presence, rate-limit, tokens, cache | ephemeral — **never truth** |
+| **Redis/Valkey** | **cross-process hot layer** — handoff, Polaris reads, write-behind, presence, rate-limit, tokens, cache | ephemeral — **never truth** |
 
 - **Online player state lives in room memory.** Opening your inventory = an **in-memory read, instant, zero DB/Redis hit** (the client even has a synced view). The room *is* the hot store for the online player.
 - **Data flow:** `join → load from Postgres into room memory → read/mutate in room memory (free) → write-through to Postgres on change (via the event log) → Redis for cross-process visibility`.
-- **Redis's role for player state** is the **cross-process** cases room memory can't cover: zone handoff (stash snapshot for the next room), meta-server/API reads outside a room, write-behind buffering, anything shared across zones. **Redis is ephemeral/cache/coordination, never the source of truth.** Postgres owns durable data.
+- **Redis's role for player state** is the **cross-process** cases room memory can't cover: zone handoff (stash snapshot for the next room), Polaris/API reads outside a room, write-behind buffering, anything shared across zones. **Redis is ephemeral/cache/coordination, never the source of truth.** Postgres owns durable data.
 - **Redis is in from the start** (cheap, inevitable) — it *must* be on the moment you go multi-process (§10), because `LocalPresence` doesn't cross processes.
 
 ---
 
 ## 9. Zone transition (handoff)
 
-Zones are isolated (no shared real-time state), but the **player is continuous** because durable identity lives in the meta-layer/DB. Crossing a zone:
+Zones are isolated (no shared real-time state), but the **player is continuous** because durable identity lives in the Polaris tier/DB. Crossing a zone:
 
 ```
-persist current state → leave room A → (meta-layer/matchmaker routes) → join room B → rehydrate from DB/Redis
+persist current state → leave room A → (Polaris/matchmaker routes) → join room B → rehydrate from DB/Redis
 ```
 
-The room is just the **live stage** for an area; the DB is **who you are**. Cross-zone things that feel like they "span" (party with a friend in another zone, global chat, your global COIN, a trade) are **non-spatial** — handled by the meta-layer/economy by player-ID, never through a zone room.
+The room is just the **live stage** for an area; the DB is **who you are**. Cross-zone things that feel like they "span" (party with a friend in another zone, global chat, your global COIN, a trade) are **non-spatial** — handled by the Polaris tier/economy by player-ID, never through a zone room.
 
 ---
 

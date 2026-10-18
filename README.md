@@ -5,19 +5,19 @@ Real-time MMO + reusable multi-game engine. All design documentation lives in [`
 ## Layout
 
 ```
-services/   runnable backend services  — realtime (now) · meta, cognition (later)
-packages/   shared libraries           — net-contract (now)
+services/   runnable backend services  — realtime (now) · polaris, cognition (later)
+packages/   shared libraries           — norma (now)
 client/phaethon/ netcode POC harness     — Vite + Phaser + colyseus.js (now; throwaway)
 client/astrolabe/  Godot 4.5 client        — the Jupiter SDK (destination client; later)
 docs/        all design docs
-docker-compose.infra.yml   Postgres + Valkey (infra only; the app runs on the host in dev)
+docker-compose.gaia.yml   Postgres + Valkey (infra only; the app runs on the host in dev)
 ```
 
 ## Quickstart (dev)
 
 ```bash
 pnpm install
-pnpm infra:up                              # Postgres (+ Valkey) via docker compose
+pnpm gaia:up                              # Postgres (+ Valkey) via docker compose
 pnpm --filter @celestia/atlas dev       # the 20 Hz zone server on :2567  (GET /health)
 ```
 

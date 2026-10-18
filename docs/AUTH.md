@@ -5,43 +5,88 @@
 
 **Status:** **The "As built (P1)" section below is authoritative for what currently exists.** §0–§8 are the original forward design (Discord/Telegram/alpha-gated, NestJS + Passport + Redis) — **largely NOT yet implemented**; treat them as the aspirational target, not current state. **Where the two conflict, As built wins.**
 **Owners:** Platform / Auth.
-**Scope (design target):** Discord-authenticated sessions for the Godot client across Web/Desktop/Mobile/Telegram; a meta service as account authority + token issuer; the realtime server as offline-verifying resource server. **What's built today is a small subset — see As built (P1).**
+**Scope (design target):** Discord-authenticated sessions for the Godot client across Web/Desktop/Mobile/Telegram; Polaris as account authority + token issuer; the realtime server as offline-verifying resource server. **What's built today is a small subset — see As built (P1).**
 
 > This document opens with a **Canonical Constants** block. Section-level drift (channel names, claim shapes, subject ids, signing algorithms) was the top-ranked risk in red-team; those values are frozen here and MUST be imported from a single shared package (`@celestia/auth-contract`), never re-declared per service. A contract test (§7, MUST-13) fails CI if issuer and verifier disagree.
 
 ---
 
-## As built (P1) — authoritative for the current implementation
+## Decision (P1.5) — session-first auth: no client-held reusable access token
 
-What actually ships today is a lean subset of the design below: **Polaris** (`services/polaris`, `@celestia/polaris`) — a **Fastify** HTTP service on **Kysely + node-postgres** and **`jose`** (EdDSA) — plus connect-ticket verification in **Atlas** (`services/atlas`, Colyseus). **No Discord, Telegram, NestJS, Passport, or Redis/Valkey yet** — those stay forward design.
+**Why.** A reusable bearer access token **fans out**: one token drives unlimited parallel requests from any
+number of machines, and rate-limiting caps request *volume*, not fan-out — you automate it and spread it
+across IPs. A **connection is the unit of authentication**: the server holds it, so it enforces
+**exactly one live session per account** — an invariant, *not* a tunable number; a new connect **displaces**
+the old (the classic "logged in elsewhere" kick) — and can **revoke instantly** on ban. REST cannot do this
+because a stateless request *is* no connection to count. So the authenticated surface is a bound, single
+session — not sprayed REST.
+
+**The model (supersedes the client-held reusable EdDSA access JWT in "As built" below):**
+- **Login (REST, `POST /auth/:method`)** → a **rotating refresh** + a **one-time session ticket** (short-TTL,
+  single-use `jti` — the connect-ticket pattern we already have, generalized). The client is handed **no
+  reusable access token.**
+- Client opens **one bound session** (WSS) presenting the ticket; `onAuth` verifies + burns the `jti`; the
+  handshake **displaces any existing session** for that account (one session per account — invariant).
+- **Profile / characters / zone-entry ride that one session as messages** (see `CHARACTERS.md`), never
+  free-floating REST. Zone entry mints an **internal one-time zone ticket** → the Atlas zone connection
+  (today's connect-ticket, now an internal hop).
+- **Re-auth:** on session drop the client exchanges the rotating refresh (REST, reuse-detected) for a fresh
+  one-time ticket and reconnects.
+
+**Open (settle in build):** does the session gateway live on **Polaris** (keeps identity/characters in the
+Polaris tier; Polaris grows a WS endpoint via `@fastify/websocket` but still never ticks) or as a **Colyseus
+lobby room on Atlas** (reuses existing socket infra, but pulls account reads toward the realtime tier)?
+**Recommend Polaris-hosted** to hold the tier boundary. Identity + `basic` + refresh mechanics below are
+**unchanged**; only the *access* half changes (reusable JWT → one-time ticket + connection-capped session).
+
+---
+
+## As built (P1.5) — authoritative for the current implementation
+
+What ships today: **Polaris** (`services/polaris`, `@celestia/polaris`) is a **NestJS** app — the REST auth handoff **+ a WS session gateway** — built on the shared **`@celestia/firmament`** Nest package (Config / Database / Ticket), **Kysely + node-postgres**, **`jose`** (EdDSA); every dependency resolves through Nest DI. **Atlas** (`services/atlas`) is a **NestJS app hosting Colyseus** that verifies the zone ticket in `onAuth`. **Session-first** (Decision P1.5 above): the client holds **no reusable access token**. **No Discord, Telegram, Passport, or Redis/Valkey yet** — those stay forward design.
+
+> **What happens *after* login — characters, zone entry, the zone ticket → `docs/CHARACTERS.md`.**
+> AUTH.md owns identity + sessions; CHARACTERS.md owns the flow past login (the bound session gateway's
+> `session.state` / `character.create` / `play.enter` messages).
 
 **Auth method (port + adapters).** `AuthMethod` is an **authentication-only** port (authn, not authz). The one implemented adapter is **`basic`**: `{ username, secret }`, where `secret` is a shared **`BASIC_AUTH_SECRET`** that only gates *access to the method* — it grants **no role**. Discord/Google/Apple/Steam/wallet are future sibling adapters behind the same port (no core change). The username is the stable external id.
 
 **Identity — login *is* registration** (`migrations/0001_identity.sql`):
 - `account` — stable internal `account_id` (uuid); `handle` (chosen later, nullable); `role` (→ `role` table, default `terra`); `status` (`active|suspended|banned`).
 - `auth_identity(method, external_id)` **UNIQUE → `account_id`**, many-to-one — the satellite table that makes adding methods *and* account-linking a non-migration.
+- `game_character` (per-account save) + `character_placement` (hot world-state) — `migrations/0002_character.sql`; see `docs/CHARACTERS.md`.
 - `refresh_token` — opaque, rotating, **hashed at rest**.
 - `role` — the seeded **elements** vocabulary (below).
 
 `findOrCreateAccount`: first sight of a `(method, external_id)` creates the account at role `terra`; the response carries `{ session, account, created }`.
 
-**Sessions** (`SessionService`, `jose`):
-- **Access** = EdDSA **JWT**; claims `sub` = `account_id` + `role` (role read from authoritative DB — **G11**, never a client input). TTL 900 s.
-- **Refresh** = opaque random token, **rotating**; only a pepper-HMAC (`AUTH_TOKEN_PEPPER`) is stored, never the raw. Rotation chain; **reuse of a spent token burns the account's whole chain**; refresh re-reads role from the DB and **refuses if `account.status != 'active'`** (ban-takes-effect-on-refresh). TTL 30 d.
+**Sessions** (`SessionService` + the shared `TicketService`): **no access token.** Login/refresh issue
+`{ refreshToken, sessionTicket }`. The **session ticket** is a one-time, short-TTL EdDSA JWT (`aud:"session"` +
+`jti`) that opens the one bound session, then is burned. **Refresh** = opaque rotating token, pepper-HMAC
+(`AUTH_TOKEN_PEPPER`) at rest, never the raw; rotation chain, **reuse burns the whole chain**; refresh re-reads
+role from the DB and **refuses a non-active account** (ban-takes-effect-on-refresh). TTL 30 d.
 
-**HTTP endpoints** (Fastify, `src/app.ts`):
+**REST — the auth handoff only** (NestJS `AuthController`):
 
 | route | does |
 |---|---|
-| `POST /auth/:method` | login == registration for an enabled method (`basic` now) → `{ session, account, created }`, always role `terra` |
-| `POST /auth/refresh` | rotate refresh → new session; replay / expired / inactive → 401 |
+| `POST /auth/:method` | login == registration (`basic` now) → `{ session: { refreshToken, sessionTicket }, account, created }`, role `terra` |
+| `POST /auth/refresh` | rotate refresh → new `{ session, account }`; replay / expired / inactive → 401 |
 | `POST /auth/logout` | revoke the presented refresh (idempotent) → 204 |
-| `POST /auth/ticket` | `Bearer <access>` → a one-time **connect-ticket** for the realtime server |
 | `GET /health` | liveness |
 
 CORS via `config.corsOrigins`; enabled methods via `config.auth.enabledMethods` (`["basic"]`).
 
-**Connect-ticket (meta → realtime handoff).** `POST /auth/ticket` (bearer access; re-reads the authoritative account) issues a short-TTL EdDSA JWT (`config.auth.connectTicketTtlSec`, 30 s) with `aud: "realtime"` + a `jti`. **Atlas** verifies it in `onAuth` (same public key, `aud` + one-time `jti` dedupe) and rejects any join without a valid ticket (`services/atlas/src/auth/ticket.ts`). *(No Redis `GETDEL`; the ticket is a self-verifying signed JWT with an in-process jti guard — single-process for now.)*
+**The bound session** (NestJS `@WebSocketGateway`, ws adapter) — one WS per account, **one live session
+(invariant):** a new connect displaces the old. Open with the session ticket (`?ticket=`); the gateway
+verifies + burns it. Messages: `session.state` (pushed on connect — account + characters + `maxCharacters`),
+`character.create`, `play.enter`.
+
+**Zone ticket (Polaris → Atlas handoff).** `play.enter` mints a one-time EdDSA JWT (`config.auth.connectTicketTtlSec`,
+30 s) via the shared `TicketService` — `aud:"realtime"` + a `jti`, carrying `{ accountId, role, characterId, zoneId }`.
+**Atlas** verifies it in `onAuth` (public key, `aud` + one-time `jti` dedupe) and rejects any join without one. The
+old character-less `POST /auth/ticket` is **removed**. *(Self-verifying signed JWT + in-process jti guard —
+single-process for now; a shared store comes with multi-process, `docs/REALTIME.md §10`.)*
 
 **Roles = the "elements" vocabulary** (`docs/NAMING.md`), seeded in the `role` table, stored on `account.role`:
 - **active:** `terra` (default player) · `aqua` (tester) · `aer` (staff) · `ignis` (admin/root).
@@ -133,7 +178,7 @@ Celestia authenticates **every** user on **every** host — Web, Desktop, Mobile
 ### Frameworks
 | Framework | Pick | Role in auth |
 |---|---|---|
-| Meta/API | **NestJS** (Fastify adapter) | the auth authority — OAuth exchange, token **issue**, accounts, gate; Guards enforce routes |
+| Polaris | **NestJS** (Fastify adapter) | the auth authority — OAuth exchange, token **issue**, accounts, gate; Guards enforce routes |
 | Realtime | **Colyseus 0.16** | verifies the JWT **offline** in `onAuth`; never issues tokens |
 
 ### Auth libraries

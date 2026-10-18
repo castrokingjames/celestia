@@ -13,16 +13,16 @@
 
 Precisely:
 
-- **ENGINE (reused as-is, deployed per game):** the room-as-process TCB and the fixed intent pipeline; the one `can()` policy chokepoint; the one `EconomyService` value chokepoint; owned-asset custody + the escrow saga; event-log-as-truth + the replay/reducer driver; the cognition gateway (System-1 index / System-2 dialogue / scoped memory); identity, matchmaking, coordination, moderation; the scope model; the client SDK runtime.
+- **ENGINE (reused as-is, deployed per game):** the room-as-process TCB and the fixed intent pipeline; the one `allow()` policy chokepoint; the one `EconomyService` value chokepoint; owned-asset custody + the escrow saga; event-log-as-truth + the replay/reducer driver; the cognition gateway (System-1 index / System-2 dialogue / scoped memory); identity, matchmaking, coordination, moderation; the scope model; the client SDK runtime.
 - **MODULE (all game logic/rules/content):** entity/component definitions; the intent vocabulary + per-action `enumerate()` legality + `execute()`; progression + win rules as pure reducers; economy *config* (currencies, items, reason codes, caps); NPC decision schemas + dialogue assembly; room-type definitions (tick driver, lifecycle, visibility); content/canon; the Godot render/input package.
 
-**The one line that resolves most of the design:** `can()` answers *"may this principal act on a resource of this scope/owner?"* — ENGINE, game-agnostic, deny-by-default. `enumerate()` answers *"is this a legal move in the game right now?"* — MODULE. They are different questions and live on different sides. `can()` checks **authority**; `enumerate()` checks **legality**.
+**The one line that resolves most of the design:** `allow()` answers *"may this principal act on a resource of this scope/owner?"* — ENGINE, game-agnostic, deny-by-default. `enumerate()` answers *"is this a legal move in the game right now?"* — MODULE. They are different questions and live on different sides. `allow()` checks **authority**; `enumerate()` checks **legality**.
 
 **The sweet spot (what the engine targets):** shared-world, server-authoritative, intent-based, NPC-and-economy games where every player action is an enumerable choice and the LLM returns an index into a sim-authored option set. Both launch titles — a **cozy life-sim** (Harvest-Moon-like) and a **Pokémon-like** (collect / turn-based battle / trade) — are expressible as modules against the *same* engine.
 
 **Explicit non-goals:** twitch shooters / sub-100ms competitive action; offline single-player; **dynamic third-party plugin loading** (untrusted code in the single-threaded TCB — a hard anti-goal); cross-game asset/currency portability.
 
-**The locked invariants hold across all games, verbatim:** client not trusted; LLM not trusted (returns an index/typed candidate-intent, is never assembled into an Actor); one `can()` chokepoint; event-sourced truth with pure replay; ports/adapters; integer money `NUMERIC(38,0)`. A GameModule is **trusted code inside the TCB** — the clean boundary is an *interface discipline* (capability handles + zero engine-internal reach) that buys multi-game reuse, **not** a security sandbox.
+**The locked invariants hold across all games, verbatim:** client not trusted; LLM not trusted (returns an index/typed candidate-intent, is never assembled into an Actor); one `allow()` chokepoint; event-sourced truth with pure replay; ports/adapters; integer money `NUMERIC(38,0)`. A GameModule is **trusted code inside the TCB** — the clean boundary is an *interface discipline* (capability handles + zero engine-internal reach) that buys multi-game reuse, **not** a security sandbox.
 
 ### 1.1 The honest correction this doc makes
 
@@ -39,10 +39,10 @@ The facet designs disagreed about the battle, and **the disagreement is the find
 | **Entities + components (storage, id alloc, wire-sync)** | ENGINE | Both games are entities-with-components; the scope/DAL hard-scope is the privacy TCB — too dangerous to re-implement per game. |
 | **Entity *definitions* (which components, which are synced vs server-only brain)** | MODULE | Pure data declared at mount; the engine stores/syncs what it is told. |
 | **Scope enforcement (GLOBAL / SHARED / PER_PLAYER / PLATFORM-GLOBAL)** | ENGINE | The cross-account-read-is-physically-impossible guarantee. |
-| **Intents: pipeline *order* + TCB** (`auth → resolveResource → can() → enumerate → reserve → commit-barrier → execute → fenced append → ack`) | ENGINE | The fixed stage order is the security spine. |
+| **Intents: pipeline *order* + TCB** (`auth → resolveResource → allow() → enumerate → reserve → commit-barrier → execute → fenced append → ack`) | ENGINE | The fixed stage order is the security spine. |
 | **Intent *vocabulary* + `enumerate()` legality + `execute()` numbers** | MODULE | Legality and all game math (price, damage, affection, yield). |
 | **`resolveResource` (id → `Resource{scope, ownerAccountId}`)** | **MODULE declares typing; ENGINE performs the trusted read** | Scope/owner read **only** from authoritative state, never the client payload. |
-| **Authz `can(actor, authzClass, resource, ctx)`** | ENGINE | One chokepoint, closed game-agnostic `AuthzClass` vocabulary; deny-by-default. |
+| **Authz `allow(actor, authzClass, resource, ctx)`** | ENGINE | One chokepoint, closed game-agnostic `AuthzClass` vocabulary; deny-by-default. |
 | **Mapping game verb → `authzClass`** | MODULE | Each action tagged with exactly one class at registration; unmapped ⇒ deny. |
 | **Progression / win rules** | MODULE | Pure reducers + optional `terminal()`; the engine stays silent on "winning." |
 | **Economy *mechanism* (double-entry, idempotency, holds, `NUMERIC(38,0)`, fence)** | ENGINE | The one value chokepoint; the module gets a handle, never writes a balance. |
@@ -70,7 +70,7 @@ The facet designs disagreed about the battle, and **the disagreement is the find
 | 6 | **PvP simultaneous secret commit** | never — no adversarial co-present intents | both pick hidden, then reveal | **Genuine new intent-pipeline stage** (sealed-commit barrier). Facet-1's "round-trip unchanged" is false for PvP. **BUILD DURING GAME #1.** | Engine (barrier) · Module (`isTurnComplete`) |
 | 7 | **Hidden-info visibility** | per-owner auto-scope suffices | per-seat, per-reveal-state | **New per-seat view-filter hook** over the per-client StateView; static `shared-wire\|per-player\|server-only` is insufficient. | Engine (hook) · Module (filter) |
 
-**Net honesty verdict.** The engine's *primitives* (room, intent pipeline, enumerate→index cognition, event log, `can()`, scopes, `EconomyService`) are genuinely genre-neutral. The places the single-game design was *secretly life-sim-shaped* are exactly these, now all made explicit and all scheduled for game #1: **(a)** hardcoded real-time tick + single global clock → per-room-type tick driver + per-instance timer; **(b)** no sealed-commit stage → the barrier; **(c)** no per-seat visibility → the view-filter hook; **(d)** inventory-as-items vs stateful owned assets → custody; **(e)** pinned-persistent assignment vs ephemeral instances → the `Match` sibling; **(f)** deferred synchronous trade → escrow flips to BAKE-IN; **(g)** game-blind `can()` → `game_id` as a first-class scope dimension (§6).
+**Net honesty verdict.** The engine's *primitives* (room, intent pipeline, enumerate→index cognition, event log, `allow()`, scopes, `EconomyService`) are genuinely genre-neutral. The places the single-game design was *secretly life-sim-shaped* are exactly these, now all made explicit and all scheduled for game #1: **(a)** hardcoded real-time tick + single global clock → per-room-type tick driver + per-instance timer; **(b)** no sealed-commit stage → the barrier; **(c)** no per-seat visibility → the view-filter hook; **(d)** inventory-as-items vs stateful owned assets → custody; **(e)** pinned-persistent assignment vs ephemeral instances → the `Match` sibling; **(f)** deferred synchronous trade → escrow flips to BAKE-IN; **(g)** game-blind `allow()` → `game_id` as a first-class scope dimension (§6).
 
 ---
 
@@ -107,7 +107,7 @@ export interface GameModule {
   onLeave(p: LeaveContext, reason: LeaveReason, caps: RoomCaps): Promise<void>; // reason: 'graceful'|'disconnect'|'kick'
   onRoomDispose(caps: RoomCaps): Promise<void>;
 
-  // ---- INTENT LEGALITY + EXECUTION (engine wraps with auth/can()/fence/barrier) ----
+  // ---- INTENT LEGALITY + EXECUTION (engine wraps with auth/allow()/fence/barrier) ----
   resolveResource(i: Intent, w: WorldView): Resource | null; // id → {scope, ownerAccountId}; from AUTHORITATIVE state
   enumerate(r: Resource, w: WorldView, actor: ActorRef): OptionSet;  // PURE legality
   execute(ctx: ExecuteCtx, caps: RoomCaps): Event[];         // compute numbers; effects via caps; returns events
@@ -116,7 +116,7 @@ export interface GameModule {
   isTurnComplete(committed: SealedCommit[], live: Seat[], now: TickTime): boolean; // commit-barrier predicate
   resolveTurn(state: unknown, revealed: ChosenOption[], seed: bigint): Event[];    // PURE seeded reducer
   projectMatchResult(state: unknown): MatchResult;           // transient battle state → durable outcomes
-  applyMatchResult(r: MatchResult, caps: RoomCaps): Event[]; // committed by the SINGLE writer, through can()+EconomyService
+  applyMatchResult(r: MatchResult, caps: RoomCaps): Event[]; // committed by the SINGLE writer, through allow()+EconomyService
   onForfeit(seat: Seat, cause: ForfeitCause, caps: RoomCaps): Event[]; // disconnect/timeout → award opponent, release checkout
   viewFilter(state: unknown, seat: Seat): unknown;           // per-seat visibility (hidden-info battle)
 
@@ -156,7 +156,7 @@ export interface ModuleRegistry {
 }
 ```
 
-The `AuthzClass` vocabulary is **closed and game-agnostic**: `read | write_owned | interact_shared | transfer_custody | spend_own` + the fixed engine admin/money/staff verbs + **`match_seat`** (participation in *this* Match's roster — see §3.6). The `can()` `Action` union does **not** grow per game; game verbs are *tagged* with one class at registration.
+The `AuthzClass` vocabulary is **closed and game-agnostic**: `read | write_owned | interact_shared | transfer_custody | spend_own` + the fixed engine admin/money/staff verbs + **`match_seat`** (participation in *this* Match's roster — see §3.6). The `allow()` `Action` union does **not** grow per game; game verbs are *tagged* with one class at registration.
 
 ### 3.4 Capability handles — `RoomCaps` (the module never sees Postgres / Valkey / the room object / a model socket)
 
@@ -223,7 +223,7 @@ for (const env of this.drainIntents()) {                                      //
   if (!spec) { this.reject(env,'unknown_action'); continue; }                //     unmapped ⇒ deny-by-default
   const r = this.mod.resolveResource(env.intent, this.view);                 // (M) scope+owner from AUTHORITATIVE state
   if (!r) { this.reject(env,'unknown_resource'); continue; }
-  if (can(actor, spec.authzClass, r, this.ctx).effect==='deny')              // (1 E) THE policy chokepoint + game_id scope
+  if (allow(actor, spec.authzClass, r, this.ctx).effect==='deny')              // (1 E) THE policy chokepoint + game_id scope
       { this.auditDeny(); this.reject(env,'forbidden'); continue; }
   const opts = this.mod.enumerate(r, this.view, actor);                      // (2 M) legality — PURE
   if (!opts.has(env.intent.optionIndex)) { this.reject(env,'not_enumerated'); continue; }
@@ -246,19 +246,19 @@ this.mod.onTick(this.tickCtx, this.caps);                                   // (
 this.dispatchCognition();                                                   // (E) no await; mailbox
 ```
 
-NPC/dialogue apply reuses the **same** gate: the engine sets `actor={kind:'sim'}` itself, re-`enumerate`s NOW (world moved), re-runs `can()`, then `execute`. A fully prompt-injected model can at most re-weight sanctioned options inside its own session — it is structurally never a principal.
+NPC/dialogue apply reuses the **same** gate: the engine sets `actor={kind:'sim'}` itself, re-`enumerate`s NOW (world moved), re-runs `allow()`, then `execute`. A fully prompt-injected model can at most re-weight sanctioned options inside its own session — it is structurally never a principal.
 
 ### 3.7 One worked intent round-trip — `give_gift(mira, leek)`
 
 1. **Client.** Drag leek onto Mira → `on_player_action(&"give_gift","npc:mira",0)` → `IntentEnvelope{seq, type:"give_gift", payload:{target:"npc:mira", item:"leek"}}` over the one WSS. *IntentSender structurally refuses any `amount`/`price` field.*
 2. **Engine — admit.** Rate-limit + bounds → queue; drained in `(recvTick,sid,seq)` order.
-3. **Engine — resolve + authorize.** `catalog["give_gift"] = {authzClass:'interact_shared', locate:p=>p.target}`. `resolveResource("npc:mira")` reads authoritative state: `{kind:'villager', scope:'SHARED', owner:undefined}`. `can(player,'interact_shared',mira,ctx)` with `ctx.gameId='cozy'` → **allow**.
+3. **Engine — resolve + authorize.** `catalog["give_gift"] = {authzClass:'interact_shared', locate:p=>p.target}`. `resolveResource("npc:mira")` reads authoritative state: `{kind:'villager', scope:'SHARED', owner:undefined}`. `allow(player,'interact_shared',mira,ctx)` with `ctx.gameId='cozy'` → **allow**.
 4. **Module — legality.** `enumerate(mira, world, player)` → `[give_gift, converse, …]`, each pre-filtered (does Alice hold a leek? is Mira mid-conversation?). `optionIndex 0` ∈ set.
 5. **Engine — reserve.** Mira is SHARED → room checks `holdsFence(mira)`. Yes.
 6. **Module — execute.** Returns events; effects via caps: `store.patch("inv:alice","items",{leek:-1})` (PER_PLAYER, hard-scoped to Alice); reads `rel:alice:mira` (auto-scoped — Bob can never be returned); emits `gift.given@1`; `cognition.decide("npc_gift_reaction","npc:mira",60)` (S1, no await).
 7. **Engine — append + ack.** `gift.given@1` written durable-before-ack in one txn (`seq`, `prev_hash` chained, fenced); `ack(seq)`.
 8. **Engine — mailbox (tick N+k).** S1 returns `{argmaxIndex:0 /*delighted*/, probs, seed}`; staleness guard passes; `onDecision` called.
-9. **Module — apply.** Re-`enumerate` confirms still legal; engine re-runs `can({kind:'sim'},'write_owned',rel:alice:mira)`; `store.patch("rel:alice:mira",{affection:+8})`; optional `cognition.converse` for an S2 line.
+9. **Module — apply.** Re-`enumerate` confirms still legal; engine re-runs `allow({kind:'sim'},'write_owned',rel:alice:mira)`; `store.patch("rel:alice:mira",{affection:+8})`; optional `cognition.converse` for an S2 line.
 10. **Engine → Client.** The `rel:alice:mira` patch rides Alice's PER_PLAYER StateView → `on_entity_changed` → `_hud.set_affection`. S2 tokens stream as `dialogue.token`. Net: Alice's inventory decremented, only her relationship moved, one replayable event logged, the client asserted no number.
 
 ---
@@ -268,20 +268,20 @@ NPC/dialogue apply reuses the **same** gate: the engine sets `actor={kind:'sim'}
 | Service (codename) | Generic primitive exposed to modules | Handle | Engine owns / module owns |
 |---|---|---|---|
 | **Auth (Janus)** | identity; `account_id` as the sole cross-game principal | none at runtime (`client.auth` inside the Actor) | E: token mint/refresh, 60s single-use realtime ticket (now `game`-claimed), JWKS, ban fan-out, login adapters · M: `OPEN_TIERS`/flags config |
-| **Authz (Libra/Astraea)** | one pure `can(actor, authzClass, resource, ctx)` | engine *calls* it; module supplies `resolveResource` + action→class map | E: chokepoint, Actor union, deny-by-default, DAL hard-scope, `game_id` scope dimension · M: resource typing, legality in `enumerate` |
+| **Authz (Libra/Astraea)** | one pure `allow(actor, authzClass, resource, ctx)` | engine *calls* it; module supplies `resolveResource` + action→class map | E: chokepoint, Actor union, deny-by-default, DAL hard-scope, `game_id` scope dimension · M: resource typing, legality in `enumerate` |
 | **Room (Atlas / Colyseus)** | `CelestiaRoom` base → `ZoneRoom` + `MatchRoom` siblings (§4.1) | `RoomCaps` | E: tick, drain order, fence, reserve, barrier, sync, reconnect, handoff · M: room-type defs + hook bodies |
 | **Economy (Moneta)** | double-entry ledger over module-declared currencies | `LedgerHandle` | E: postings, conservation, idempotency, holds, fence, `NUMERIC(38,0)`, `SYS_*`, durable-before-ack · M: currency semantics, reason codes, prices (computed in `execute`) |
 | **Custody (part of Moneta)** | owned-asset ownership transfer + escrow saga (§4.3) | `CustodyHandle` | E: atomicity, anti-dupe, `trade_block`, two-leg commit · M: asset kinds, state schema, tradeability |
 | **Persistence (Akasha)** | append-only `log.event` + replay driver | `EventSink` | E: `seq`, `prev_hash`, fence-guarded append, replay-reads-logged-oracle, crypto-shred, `event_type@version` registry · M: event types + pure reducers |
 | **Cognition (Mercury S1 / Calliope S2 / Mnemosyne RAG)** | batching gateway over a frozen `DecisionFrame`; index-only S1, typed-intent S2; scoped recall | `CognitionHandle`, `MemoryHandle` | E: routing, batching, model creds, staleness guard, index-into-enum guarantee, RAG scope in the TCB · M: `gameContext` (opaque), `allowedAnswers`, persona, recall query |
-| **Moderation (Custos)** | report intake + `authz.restriction` records consumed by `can()` with deny-precedence | declares restriction-type→denied-action rows | E: report plane, classifier port, restriction mechanism, ban fan-out · M: what is moderatable, the restriction table |
+| **Moderation (Custos)** | report intake + `authz.restriction` records consumed by `allow()` with deny-precedence | declares restriction-type→denied-action rows | E: report plane, classifier port, restriction mechanism, ban fan-out · M: what is moderatable, the restriction table |
 | **Client SDK (Astrolabe)** | `ITransport`, one `IntentSender` (money firewall), `EntityView`, `DialogueClient`, `Session`, protocolVersion handshake + a `RenderPackage` slot | SDK facades | E: all of the above · M: the render package |
 | **Timer / Match (new)** | deterministic per-instance timers; server-side instanced-session creation | `TimerHandle`, `MatchHandle` | E: timer wheel keyed to event-time, Match lifecycle + roster · M: deadlines, Match kinds + rosters |
 
 ### 4.1 The room factoring (the one engine extension, built during game #1)
 
 ```ts
-abstract class CelestiaRoom {               // owns the TCB: intent queue, can() chokepoint, enumerate→reserve→execute,
+abstract class CelestiaRoom {               // owns the TCB: intent queue, allow() chokepoint, enumerate→reserve→execute,
   protected mod: GameModule;                //   fenced log append, cognition dispatch, reconnect, per-seat sync
 }
 class ZoneRoom  extends CelestiaRoom {}     // + spatial StateView, world_clock subscription, matchmaking-continuity assign
@@ -296,7 +296,7 @@ interface MatchHandle {                     // server-side instanced-session cre
 }
 ```
 
-**Why this is a factoring, not a fork:** `MatchRoom` inherits the *entire* TCB — same `can()`, same `enumerate→reserve→execute`, same fenced `log.event`, same cognition dispatch, same reconnect. It opts **out** of three Zone-only concerns (spatial interest grid, continuous `world_clock` ticker, continuity assignment) and opts **in** to a turn barrier + a result channel + a per-instance timer. **Second consumers in the life-sim** keep each piece from being Pokémon-specific: instanced interiors / co-op cooking / festival mini-games (Match lifecycle); trade confirmation and synchronized co-op actions (commit-barrier); the engine already per-player-instances home farms and runs a private 1:1 dialogue slot (both degenerate Matches). We are naming latent primitives, not inventing foreign ones.
+**Why this is a factoring, not a fork:** `MatchRoom` inherits the *entire* TCB — same `allow()`, same `enumerate→reserve→execute`, same fenced `log.event`, same cognition dispatch, same reconnect. It opts **out** of three Zone-only concerns (spatial interest grid, continuous `world_clock` ticker, continuity assignment) and opts **in** to a turn barrier + a result channel + a per-instance timer. **Second consumers in the life-sim** keep each piece from being Pokémon-specific: instanced interiors / co-op cooking / festival mini-games (Match lifecycle); trade confirmation and synchronized co-op actions (commit-barrier); the engine already per-player-instances home farms and runs a private 1:1 dialogue slot (both degenerate Matches). We are naming latent primitives, not inventing foreign ones.
 
 ### 4.2 Battle-state durability — the contradiction resolved
 
@@ -351,10 +351,10 @@ A battle is a **`MatchRoom`** (room-vs-sub-entity decision **made**, not waffled
 1. **Room factoring** (§4.1) — `Zone`/`Match` siblings.
 2. **Sealed-commit barrier** (§3.6) — PvP picks are held server-side and revealed *simultaneously*. `enumerate()` solves turn-*ownership*; the barrier solves hidden-*simultaneous*-selection — the genuine new pipeline stage facet-1 wrongly denied. **Built for committed Pokémon PvP; its API is NOT generalized for hypothetical sealed-bid auctions / RPS** (YAGNI, §7).
 3. **Per-instance turn timer** (`TimerHandle`) — per-turn deadline → auto-struggle/forfeit; a per-match timer keyed to event-time, not a second global clock.
-4. **Player-in-two-rooms** — the Zone sets `presence=in_match` (a freeze cousin of the zone-handoff saga) and delegates a scoped `checkout` of the ≤6 party into the Match. The Match is authoritative only for ephemeral battle state and **never writes durable PER_PLAYER rows or the ledger**. On terminal state it emits a typed `MatchResult`; the **single writer** (the owning Zone on return, or — folded into the `onForfeit` disconnect hook, **not** a separate generic offline channel — a Nest worker) applies durable outcomes through the normal `can()`+`EconomyService` path. No second writer ever exists.
+4. **Player-in-two-rooms** — the Zone sets `presence=in_match` (a freeze cousin of the zone-handoff saga) and delegates a scoped `checkout` of the ≤6 party into the Match. The Match is authoritative only for ephemeral battle state and **never writes durable PER_PLAYER rows or the ledger**. On terminal state it emits a typed `MatchResult`; the **single writer** (the owning Zone on return, or — folded into the `onForfeit` disconnect hook, **not** a separate generic offline channel — a Nest worker) applies durable outcomes through the normal `allow()`+`EconomyService` path. No second writer ever exists.
 5. **Per-seat visibility** (`viewFilter`) — the opponent's unrevealed bench is redacted before the StateView patch.
 
-`can()` for battle moves degenerates to **`match_seat` participation** ("is this account a rostered seat of *this* Match?") — a genuinely new resource notion, now **first-class** in the scope model (not glossed by a "can() doesn't grow" claim). The real HP writes are `actor=sim` inside `resolveTurn`, so `"authz=engine, legality=game"` holds — honestly, *because* battle effects move to the sim-writer and the player's `can()` check is near-vacuous beyond seat membership.
+`allow()` for battle moves degenerates to **`match_seat` participation** ("is this account a rostered seat of *this* Match?") — a genuinely new resource notion, now **first-class** in the scope model (not glossed by a "allow() doesn't grow" claim). The real HP writes are `actor=sim` inside `resolveTurn`, so `"authz=engine, legality=game"` holds — honestly, *because* battle effects move to the sim-writer and the player's `allow()` check is near-vacuous beyond seat membership.
 
 The genre-defining 90% (type chart, damage math, catch rates, evolution, badges) is **pure module reducer + content**.
 
@@ -375,7 +375,7 @@ The genre-defining 90% (type chart, damage math, catch rates, evolution, badges)
 
 **Your account is global; your save is per-game.** `(account_id, game_id)` composite-keys every per-game profile.
 
-**Critical defense-in-depth fix (from the critique):** `can()`'s PER_PLAYER rule (`actor.accountId === resource.ownerAccountId`) is otherwise **game-blind** — cross-game isolation would rest *entirely* on per-game DB topology, so co-locating any shared service for cost (a shared Mnemosyne/Moneta) would silently defeat it. **Therefore `game_id` is a first-class dimension inside the policy chokepoint:** `ctx.gameId` is set from the session's game-scoped token, and `can()` denies any resource whose `game_id` ≠ the session's. Isolation is enforced at the chokepoint, not just by physical separation.
+**Critical defense-in-depth fix (from the critique):** `allow()`'s PER_PLAYER rule (`actor.accountId === resource.ownerAccountId`) is otherwise **game-blind** — cross-game isolation would rest *entirely* on per-game DB topology, so co-locating any shared service for cost (a shared Mnemosyne/Moneta) would silently defeat it. **Therefore `game_id` is a first-class dimension inside the policy chokepoint:** `ctx.gameId` is set from the session's game-scoped token, and `allow()` denies any resource whose `game_id` ≠ the session's. Isolation is enforced at the chokepoint, not just by physical separation.
 
 **Identity: one Celestia account, game-scoped sessions.** Log in once → one `account_id` → pick a game. The realtime ticket carries a `game` claim + game-scoped entitlements; each game's `onAuth` rejects any ticket whose `game` ≠ its `gameId`. A Pokémon token can never open a life-sim room. This is an *additive* extension of the frozen `aud:*-realtime` token, ratified via the MUST-13 contract test — not a silent edit.
 
@@ -394,7 +394,7 @@ The genre-defining 90% (type chart, damage math, catch rates, evolution, badges)
 
 ```ts
 export function runGameModuleConformance(make: () => GameModule) {
-  test('every mutating intent routes through can() before execute');            // AUTHZ invariant
+  test('every mutating intent routes through allow() before execute');            // AUTHZ invariant
   test('resolveResource reads scope/owner from world state, never the envelope');// forgery guard
   test('ctx.gameId is enforced; a resource of another game_id is denied');       // cross-game isolation
   test('every event_type@version has a PURE reducer that round-trips replay');
@@ -422,7 +422,7 @@ export function runGameModuleConformance(make: () => GameModule) {
 | Per-seat `viewFilter` hook | **BAKE NOW** | hidden-info battle; static per-component sync cannot express it |
 | Per-instance `TimerHandle` (deterministic, event-time) | **BAKE NOW** | turn deadlines; also crop/respawn/festival windows |
 | Owned-asset custody + `escrowSwap` saga (N9 flip) | **BAKE NOW** | creature trade is a core loop; life-sim gifting too |
-| Game-scoped identity + `game_id` first-class in `can()` + `(account_id,game_id)` save key | **BAKE NOW** | required the moment there are two games; defense in depth |
+| Game-scoped identity + `game_id` first-class in `allow()` + `(account_id,game_id)` save key | **BAKE NOW** | required the moment there are two games; defense in depth |
 | Per-game deploy topology + GDPR fan-out orchestrator | **BAKE NOW** | the premise of a multi-game engine |
 | `GameModule` contract + CTK + four-tier scoping | **BAKE NOW** | the proof the boundary holds |
 | Interest-management + visibility as per-room-type opt-in | **BAKE NOW** | battle rooms must not pay for a spatial grid they don't use |
@@ -445,7 +445,7 @@ export function runGameModuleConformance(make: () => GameModule) {
 4. **"ONE value chokepoint" silently became two authorities + a cross-chokepoint saga.** A direct softening of a locked invariant and the natural home for dupes. *Mitigation:* the invariant is **explicitly amended** (§4.3) to "exactly two chokepoints, one escrow saga with specified two-phase atomicity"; no third path; CTK-asserted.
 5. **Hidden-info visibility inexpressible in the static sync model.** *Mitigation:* `viewFilter` per-seat hook (§3.5, §5.1); redaction server-side; CTK-tested.
 6. **Single global Clock Authority cannot host a per-match turn clock/timeout/forfeit.** *Mitigation:* tick driver is per-room-type; `TimerHandle` gives per-instance event-time timers without a second clock authority.
-7. **`can()` is game-blind; isolation rode deployment topology.** One co-location decision from cross-game leakage. *Mitigation:* `game_id` first-class in the chokepoint (§6); CTK-tested against a foreign-`game_id` resource.
+7. **`allow()` is game-blind; isolation rode deployment topology.** One co-location decision from cross-game leakage. *Mitigation:* `game_id` first-class in the chokepoint (§6); CTK-tested against a foreign-`game_id` resource.
 8. **Battle-state durability was contradictory.** *Mitigation:* ruling (§4.2) — turns are durable event-sourced truth; "ephemeral" = process not stream; reconnect replays the turn stream.
 9. **Shared control plane is the one cross-game SPOF / breach blast-radius.** The "independent crash blast-radius" claim holds for the data plane only. *Mitigation:* treat the control plane as the highest-availability, highest-scrutiny tier; a global ban must preempt a live per-game session — define the revocation path (short-TTL game-scoped tokens + a push revocation channel each room honors mid-tick) in AUTH.md.
 10. **Forever-compat of engine event schemas, per game.** *Mitigation:* replay supports every historical `@version`; schema bumps are additive; a per-game "oldest replayable version" is tracked and gated.
@@ -457,5 +457,5 @@ export function runGameModuleConformance(make: () => GameModule) {
 3. **Global-ban mid-session enforcement latency:** the acceptable upper bound and the push-revocation mechanism (AUTH.md).
 4. **Oldest-replayable-version policy:** per-game retention vs snapshotting of ancient logs to bound the forever-compat surface.
 5. **Marriage/global-exclusivity (life-sim):** PER_PLAYER "your-version" marriage ships now; a globally-exclusive claim would need a SHARED claim + lease/escrow — deferred.
-6. **Shared vs per-game cognition fleet:** cost pressure may tempt a shared Mnemosyne/Moneta; permitted *only* because `game_id`-in-`can()` + DAL hard-scope now make co-location safe — but confirm the GRANT model holds under co-location before doing it.
+6. **Shared vs per-game cognition fleet:** cost pressure may tempt a shared Mnemosyne/Moneta; permitted *only* because `game_id`-in-`allow()` + DAL hard-scope now make co-location safe — but confirm the GRANT model holds under co-location before doing it.
 7. **Private-farm-ahead-of-town-time residual:** the one place the single-player time model does not fully survive the shared-world port (per-instance fast-forward re-syncs on entering town) — accept as an MMO tax or design a reconciliation UX.

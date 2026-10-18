@@ -28,7 +28,7 @@ Everything co-hosted on a single VM via `docker-compose` (same compose file = lo
 
 | Instance | What | Notes |
 |---|---|---|
-| **Node app** | NestJS (meta/auth) + Colyseus (realtime rooms) | 1 process (or 2 if split). **Colyseus = one process hosts ALL zone-rooms** (rooms aren't separate processes). |
+| **Node app** | NestJS (Polaris/auth) + Colyseus (realtime rooms) | 1 process (or 2 if split). **Colyseus = one process hosts ALL zone-rooms** (rooms aren't separate processes). |
 | **PostgreSQL** | Truth / event-log / ledger / entities | Self-hosted in Docker. Single primary, no replicas at v1. |
 | **Valkey (Redis)** | Presence, pub/sub, cache, rate-limit, handoff codes | **Optional until multi-process** — with ONE Colyseus process, in-process state + Postgres suffice. Keep Redis access behind an interface so adding it later is a one-line swap. |
 | **Caddy** | Reverse proxy + **automatic TLS** (Let's Encrypt) | **Required** — browsers/Telegram/Discord-OAuth all need HTTPS/WSS. Routes `/api`→NestJS, `wss://`→Colyseus. (nginx/Traefik also work; Caddy is simplest.) |
@@ -151,7 +151,7 @@ Cloudflare Worker (off-infra)  ── polls each /health on a schedule ──▶
 ### 9.1 Health checks (`/health`) — per-process, not centralized
 - Each process serves its **own** `/health` **readiness** endpoint: `200` = *can serve* (verifies Postgres — and Redis once multi-process — are reachable), not merely "process alive."
 - The **Colyseus** process serves `/health` on its own HTTP server (the one it binds for the WS upgrade + matchmaking) — **from the first server box, no NestJS required.** Do **not** stand up NestJS just to answer a health check.
-- **NestJS** serves its own `/health` (via `@nestjs/terminus`, pg/redis indicators) **when it exists**, for the meta-api process.
+- **NestJS** serves its own `/health` (via `@nestjs/terminus`, pg/redis indicators) **when it exists**, for the Polaris process.
 - Consumed by: the status aggregator (below), the free UptimeRobot ping (§2), and any LB/PM2 liveness probe.
 
 ### 9.2 Status aggregator + external status page — up/down only

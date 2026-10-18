@@ -27,7 +27,7 @@ opinions, pursues its own goals, and holds a shared history with you.
 |---|---|---|
 | Client | **Godot 4** | Thin: render + input + interpolation; sends *intents* only |
 | Realtime server | **Colyseus** (Node) | Authoritative rooms; **1 room = 1 zone/village** (~hundreds of players) |
-| Meta backend | **NestJS** (Node) | Auth, accounts, inventory, matchmaking, admin/moderation tooling |
+| Polaris | **NestJS** (Node) | Auth, accounts, inventory, matchmaking, admin/moderation tooling |
 | Durable state | **Postgres** | Source of truth; **`pgvector`** for RAG embeddings (no separate vector DB to start) |
 | Hot/ephemeral state | **Redis** | Cache, pub/sub, presence, cross-room coordination, rate-limiting |
 | Inference | Separate GPU service | **Mica-4B local** (hot path) + **hosted generative** (dialogue/world-gen), via an inference gateway |

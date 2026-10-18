@@ -106,7 +106,7 @@ COMPOSITION ROOT
   @celestia/config               zod env loader → typed CelestiaConfig (discriminated unions per seam)
   @celestia/composition          buildServerContainer(cfg) + CelestiaModule.forRoot(Nest) + wireColyseus(room)
 APPS (3 processes; each builds its OWN container from the SAME config+code)
-  apps/meta-nest   apps/zone-colyseus   apps/cognition-gateway
+  apps/polaris-nest   apps/zone-colyseus   apps/cognition-gateway
 ```
 
 **What is NOT in `@celestia/ports`** (the critique's demotions): no `LedgerStore`, no `CognitionClient`, no generic `IDatabase`/`IEventBus`. `EconomyService` sits on a **plain Kysely repo** in `@celestia/ledger-contract`; the room→gateway hop is a **module behind the frozen frame**, not a wired adapter set.
@@ -248,7 +248,7 @@ export interface JwtSigningKeyProvider {                   // NEW — adapters: 
 | **Memory recall-union** | One btree implementation in P0; the ANN half becomes `MemoryStore` only when latency forces it. |
 | **verifyJwt / hasEntitlement predicate / grant-row schema** | One verifier + one text-slug OR-semantics predicate shared by both runtimes. A "pluggable verifier/check" reopens MUST-3 alg drift and the L15 constraint-migration landmine. The *sources* vary (`EntitlementSource`); the predicate must not. |
 | **Clock authority, TCB intent-validation + enumerate pipeline, S1 accept policy, model-routing table, outbox relay, config loader, telemetry (OTel is already the neutral port)** | Single safety-critical implementations; `probs-as-gates` vs `probs-as-rankings` is a **config flag on the same code path**, not an adapter. |
-| **Trade/gift escrow saga owner** | NEW placement note — not a port, but an **unowned coordination seam**. ARCH's "likely a NestJS escrow saga routing through both owning rooms" has no home in the package layout. Place it in `apps/meta-nest` **as a caller of the `EconomyService` chokepoint** (never a second value-writer); its N9 cross-zone-transfer scope is a P0 bake-in decision per WEB3-READINESS. |
+| **Trade/gift escrow saga owner** | NEW placement note — not a port, but an **unowned coordination seam**. ARCH's "likely a NestJS escrow saga routing through both owning rooms" has no home in the package layout. Place it in `apps/polaris-nest` **as a caller of the `EconomyService` chokepoint** (never a second value-writer); its N9 cross-zone-transfer scope is a P0 bake-in decision per WEB3-READINESS. |
 
 ---
 

@@ -20,7 +20,7 @@
 - Structure: `services/` not `apps/`, role-named (`realtime`), no `-server` suffix. `Source: .context/architecture/guardrails.md#G10`
 
 ## Conventions
-- No magic values / bare wire strings — name them or source from `@celestia/net-contract`/config. `Source: .context/conventions/formatting.md`
+- No magic values / bare wire strings — name them or source from `@celestia/norma`/config. `Source: .context/conventions/formatting.md`
 - ESM + NodeNext: relative imports end in `.js`; `strict` on; no `any`/`@ts-ignore` without a reason. `Source: .context/conventions/formatting.md`
 - Shared-by-≥2-services logic → a `package/`; one entry point per service. `Source: .context/conventions/organization.md`
 - Rejections are typed reason codes, never silent drops or `-1`; fail closed on cognition (abstain → scripted). `Source: .context/conventions/error-handling.md`

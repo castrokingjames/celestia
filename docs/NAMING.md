@@ -27,7 +27,7 @@ This file is a **menu**, not a verdict. Each section lists every candidate with 
 
 ---
 
-## 2. Meta-backend — accounts, matchmaking, central hub/directory, zone routing
+## 2. Polaris tier — accounts, matchmaking, central hub/directory, zone routing
 
 | Name | Type | Why it fits | Distinctiveness |
 |---|---|---|---|
@@ -57,11 +57,11 @@ This file is a **menu**, not a verdict. Each section lists every candidate with 
 
 ---
 
-## 4. Authz — authorization/policy: the judge weighing permissions, the `can()` allow/deny verdict
+## 4. Authz — authorization/policy: the judge weighing permissions, the `allow()` allow/deny verdict
 
 | Name | Type | Why it fits | Distinctiveness |
 |---|---|---|---|
-| **Libra ★** | Constellation | The celestial Scales — literally weighs allow vs deny, exactly the `can()` verdict | Common — FLAG: Meta's Libra/Diem crypto + zodiac ubiquity |
+| **Libra ★** | Constellation | The celestial Scales — literally weighs allow vs deny, exactly the `allow()` verdict | Common — FLAG: Meta's Libra/Diem crypto + zodiac ubiquity |
 | Astraea | Myth-figure + body | Greek "Star Maiden" goddess of justice holding the scales (asteroid 5) — a judge whose name means "star" | Distinctive — warm and ownable |
 | Themis | Myth-figure + body | Titaness of divine law, scales in hand (asteroid 24) — she *is* codified policy | Moderate — FLAG: some security/legal tools |
 | Equinox | Phenomenon | The moment light and dark hang in perfect balance — the knife-edge of allow vs deny | Common — FLAG: Eclipse Equinox OSGi runtime, games/cars |
@@ -270,7 +270,7 @@ Both names in the package, codename first. Keeps the theme visible while staying
 - **Favor "distinctive" picks for anything user-facing or trademarkable** — the umbrella (**Celestia**), the client-SDK, and any name that appears in marketing, store listings, or the player UI. Distinctive names are easier to own, protect, and search for.
 - **Internal-only subsystems can tolerate "common" or "moderate"** names, since collisions matter less when the name never leaves the codebase — but still prefer the hybrid or descriptive package convention so grep stays honest.
 - **Flag: any "common" pick needs a clearance check before locking** — search npm/package registries, domains, and a trademark lookup. The known hot spots already surfaced above: **Libra** (Meta/Diem), **Keystone** (OpenStack), **Bifrost** (Netflix/OpenStack/Mojang), **Hermes** (Meta JS engine), **Argus** (surveillance software), **Aurora** (AWS), **Metis**, **Clio**, **Theia**, **Mercury**, **Sirius**, and **Polaris** (reused widely). **Thoth** has no asteroid namesake — confirm the celestial grounding you want before locking.
-- When two subsystems both want the same figure (e.g. **Iris** fits auth, decision-model, bridge, and coordination; **Janus** fits auth, meta-backend, and bridge; **Astraea** fits umbrella, authz, and moderation), assign it to the single subsystem where the metaphor is strongest and give the others their next-best ★ alternative.
+- When two subsystems both want the same figure (e.g. **Iris** fits auth, decision-model, bridge, and coordination; **Janus** fits auth, the Polaris tier, and bridge; **Astraea** fits umbrella, authz, and moderation), assign it to the single subsystem where the metaphor is strongest and give the others their next-best ★ alternative.
 
 
 ---
@@ -290,9 +290,9 @@ The client SDK is **Jupiter** (facade autoload), chunked into *moon* modules:
 The two live backend services carry a celestial codename as **both their directory and package name** (pure-codename, convention (b) — not the earlier role-nouns `realtime`/`meta`, which conflicted with guardrail G10):
 
 - **Atlas** — the realtime world-server (`services/atlas` · `@celestia/atlas`): Colyseus 20 Hz authoritative sim + connect-ticket `onAuth`. (§5 world-server ★.)
-- **Polaris** — the meta tier (`services/polaris` · `@celestia/polaris`): auth, accounts, sessions, connect-ticket issuance; later matchmaking/social. (§2 meta-backend ★.)
+- **Polaris** — the HTTP/account (meta) tier (`services/polaris` · `@celestia/polaris`): auth, accounts, sessions, connect-ticket issuance; later matchmaking/social. (§2 Polaris tier ★.)
 
-Shared leaf packages stay descriptive (`@celestia/net-contract`). Future services take their ★ from the menu above when built (cognition → Mercury/Calliope, authz → Libra, economy → Moneta, …).
+Shared leaf packages were originally descriptive; per the "no plain names" call the wire contract is now codenamed **Norma** (`@celestia/norma`) — see the infrastructure-codenames note below. Future services take their ★ from the menu above when built (cognition → Mercury/Calliope, authz → Libra, economy → Moneta, …).
 
 ---
 
@@ -304,4 +304,31 @@ The two client frontends carry a celestial codename as their directory (the engi
 - **Phaethon** — the throwaway **Phaser** netcode POC harness (`client/phaethon` · `@celestia/phaethon`): asteroid 3200 Phaethon / the sun-charioteer myth, and the "Pha-" echoes "Phaser". A scrappy preview, discarded once the netcode graduates onto Astrolabe.
 
 The shared client SDK stays **Jupiter** (moon-modules per the lock above); it currently lives inside Phaethon and extracts to its own `jupiter` module when it graduates out of the POC.
+
+---
+
+## LOCKED/RESERVED — Atlas engine modules (2026-10-17)
+
+**Atlas** (world-server) composes named NestJS sub-modules. **Caelum** is shared via `@celestia/firmament`
+(Polaris + Atlas load it at boot); the rest are Atlas game-side (genre-neutral mechanisms, extractable to engine
+packages later per G3). Full map + slice mapping in `docs/REFACTOR.md`.
+
+**Building now (S1–S3):**
+
+- **Caelum** — config/topology loader (world → zones → map/sectors). *(instrument family, alongside Astrolabe.)*
+- **Janus** — Lobby: the gateway into the game (world + character selection). *(§3 ★ "god of doorways/beginnings" — repurposed from auth, since login now lives in Polaris.)*
+- **Orrery** — the game loop: movement, AoI/sectors, zone transitions, tick. *(a clockwork of moving bodies that ticks — literally the sim loop.)*
+- **Astraea** — in-game authz: the `allow()`/`qualify()` action gates. *(§4 "star-maiden of justice" — weighs allow/deny.)*
+- **Fornax** — the in-game action pipeline (`services/atlas/src/fornax`): the thin orchestrator that runs `enumerate → allow → qualify → execute → event → signal`, threading **Astraea** (the gates) and **Orrery** (the write side — `EventSink` + the signal bus). *(constellation "the Furnace" — raw untrusted intents go in, are refined through the gates, and validated truth (events) comes out.)*
+- **Themis** — in-game enforcement (`services/atlas/src/themis`): the `SessionRegistry` (one-session/account, 4409 displacement) + the revocation sweep that evicts banned/suspended players. *(§4 Titaness of divine law — the enforcement counterpart to Astraea's permission; GM chat-spam/harassment moderation is the next layer on this module.)*
+
+**Reserved (not built — naming held):**
+
+- **Iris** / **Hermes** — social, two purposes (chat / presence / friends). *(§10/§11 messenger figures.)*
+
+**Infrastructure codenames (not Atlas modules):**
+
+- **Firmament** — the shared NestJS infra package (`@celestia/firmament`): `config` · `persistence` · `tickets`. *(the fixed vault that holds the stars — the substrate every service rests on; renamed from the generic `platform`.)*
+- **Gaia** — the local datastore stack (`docker-compose.gaia.yml`; `pnpm gaia:up`/`gaia:down`): Postgres + Valkey. *(the primordial earth — the ground the world's data lives in; renamed from the generic `infra`.)*
+- **Norma** — the shared wire contract (`@celestia/norma`): `PROTOCOL_VERSION`, intent types, shared constants (`MOVE_SPEED`…), ticket claims, message shapes — imported by client + servers so the wire can't drift. *(constellation "the Carpenter's Square / Level"; `norma` = Latin for standard/rule — the protocol both sides conform to; renamed from the generic `net-contract`.)*
 

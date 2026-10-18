@@ -9,7 +9,7 @@ Add a client→server action the authoritative way. **Copy the canonical example
 
 ## Steps
 
-1. **Declare the type** in `packages/net-contract` (`INTENT_TYPES` / `IntentType`). One source of truth; never hand-type the string in the room or client (`conventions/organization.md`). Bump `PROTOCOL_VERSION` if the wire shape changes.
+1. **Declare the type** in `packages/norma` (`INTENT_TYPES` / `IntentType`). One source of truth; never hand-type the string in the room or client (`conventions/organization.md`). Bump `PROTOCOL_VERSION` if the wire shape changes.
 2. **Payload = ids / indices / typed args ONLY** — never an amount, price, balance, or state (`guardrails.md#G1`). If the action spends/earns, the server computes the number.
 3. **Handle in the room** — `this.onMessage("<type>", (client, args) => { … })`:
    - resolve the actor/resource from **authoritative state**, not the envelope (`#G6`);

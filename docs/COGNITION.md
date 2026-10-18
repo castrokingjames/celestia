@@ -69,7 +69,7 @@ ANY SYSTEM (behavior · price-tier · event trigger/params · quest draft)
   ▼        └──────────────── UNTRUSTED ────────────────┘
  cognitionInbox mailbox (tick N+k) ─ staleness guard on cid ────────────────┘
   │ (4) VALIDATE via the SAME pipeline as a player intent:
-  │     actor={kind:'sim'} · RE-ENUMERATE NOW · can() · (S2: re-validate each intent;
+  │     actor={kind:'sim'} · RE-ENUMERATE NOW · allow() · (S2: re-validate each intent;
   │     offline gen: Director/Validator = schema-valid + completable + economy-safe + canon-consistent)
   ▼
  (5) EXECUTE & OWN — the sim computes ALL numbers; store/ledger/custody via caps
@@ -165,12 +165,12 @@ ANY SYSTEM (behavior · price-tier · event trigger/params · quest draft)
 
 ## 4. The Boundary
 
-**The one law:** *The LLM proposes within sim-authored bounds; the sim owns truth.* The model returns only an index into a sim-enumerated option set, or a typed draft over a vetted DSL — and that output re-enters the same deterministic pipeline (`auth → can() → enumerate → reserve → commit → fenced append → ack`) as any client action, re-validated against the world as it is NOW. Everything irreversible, shared, or value-bearing stays in deterministic code behind that boundary, forever.
+**The one law:** *The LLM proposes within sim-authored bounds; the sim owns truth.* The model returns only an index into a sim-enumerated option set, or a typed draft over a vetted DSL — and that output re-enters the same deterministic pipeline (`auth → allow() → enumerate → reserve → commit → fenced append → ack`) as any client action, re-validated against the world as it is NOW. Everything irreversible, shared, or value-bearing stays in deterministic code behind that boundary, forever.
 
 **The LLM must NEVER touch:**
 
 - **Ledger / faucets / sinks / balances** — all value moves through the single `EconomyService` chokepoint; the model returns at most an index into a pre-capped reward enum; the amount is TCB code; cognition has zero `ledger.*` grant. (An injected model structurally cannot mint a coin.)
-- **Authz / entitlements** — `can()` is deny-by-default engine code; legality (`enumerate()`) is a different question from authority, and the model is never an authz principal.
+- **Authz / entitlements** — `allow()` is deny-by-default engine code; legality (`enumerate()`) is a different question from authority, and the model is never an authz principal.
 - **Shared-canon writes** — permanent global content, **and the timing of shared economy-affecting events**, change only via a validated typed event through the Director with **human-in-loop + kill switch**. Never a dialogue summary, never a raw generation, never a lone room-threshold trigger.
 - **Progression / win numbers** — XP, drop/growth/catch/evolution, affection tiers, type charts: pure deterministic reducers.
 - **Safety-critical** — moderation verdicts, anti-cheat, matchmaking fairness, the economy conservation audit.
