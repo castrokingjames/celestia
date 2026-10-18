@@ -8,6 +8,9 @@ import { ConfigService, REPOSITORY } from "@celestia/firmament/nest";
 import type { Repository } from "@celestia/firmament";
 import { SessionRegistry } from "./session-registry.js";
 import { selectRevoked, CODE_REVOKED } from "./revocation.js";
+import { createLogger } from "@celestia/argus";
+
+const log = createLogger("atlas:themis");
 
 @Injectable()
 export class ThemisService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -23,7 +26,7 @@ export class ThemisService implements OnApplicationBootstrap, OnModuleDestroy {
     this.#timer = setInterval(() => {
       // Guard the floated promise: a transient DB error in the sweep must LOG and let the next tick retry,
       // never become an unhandled rejection that crashes the world server (Node 22 default).
-      this.sweep().catch((err) => console.error("[themis] revocation sweep failed:", err));
+      this.sweep().catch((err) => log.error("revocation sweep failed", err));
     }, this.config.revocationSweepSec * 1000);
   }
 

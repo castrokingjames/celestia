@@ -24,6 +24,9 @@ import { CharacterLimitError, CharacterNameTakenError } from "../characters/char
 import { reserveZoneSeat } from "../rooms/seat-reservation.js";
 import type { SessionRegistry } from "../themis/session-registry.js";
 import { gateAccountStatus } from "../themis/revocation.js";
+import { createLogger } from "@celestia/argus";
+
+const log = createLogger("atlas:lobby");
 
 /** Deps handed to the room by the composition root (main.ts) via Colyseus define options. */
 export type LobbyRoomDeps = {
@@ -46,10 +49,10 @@ export class LobbyRoom extends Room<LobbyState> {
     this.deps = options;
     this.setState(new LobbyState());
     this.onMessage(SESSION_MSG.characterCreate, (client, data: CharacterCreateMsg) => {
-      this.onCharacterCreate(client, data).catch((err) => console.error("[lobby] characterCreate failed:", err));
+      this.onCharacterCreate(client, data).catch((err) => log.error("characterCreate failed", err));
     });
     this.onMessage(SESSION_MSG.playEnter, (client, data: PlayEnterMsg) => {
-      this.onEnter(client, data).catch((err) => console.error("[lobby] playEnter failed:", err));
+      this.onEnter(client, data).catch((err) => log.error("playEnter failed", err));
     });
   }
 

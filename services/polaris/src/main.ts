@@ -6,18 +6,23 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
 import { ConfigService } from "@celestia/firmament/nest";
+import { createLogger, configureLogging, type LogLevel } from "@celestia/argus";
+
+const log = createLogger("polaris");
+const LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error", "silent"];
 
 async function bootstrap(): Promise<void> {
+  if (LEVELS.includes(process.env.LOG_LEVEL as LogLevel)) configureLogging({ level: process.env.LOG_LEVEL as LogLevel });
   const app = await NestFactory.create(AppModule, { logger: ["error", "warn", "log"] });
   app.enableShutdownHooks();
   const cfg = app.get(ConfigService);
   app.enableCors({ origin: cfg.corsOrigins });
   const port = Number(process.env.PORT) || cfg.polarisPort;
   await app.listen(port, "0.0.0.0");
-  console.log(`[polaris] NestJS (HTTP help desk) listening on :${port}`);
+  log.info("listening (HTTP help desk)", { port });
 }
 
 bootstrap().catch((err) => {
-  console.error("[polaris] failed to start:", err);
+  log.error("failed to start", err);
   process.exit(1);
 });

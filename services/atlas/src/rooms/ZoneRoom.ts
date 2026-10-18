@@ -35,6 +35,9 @@ import {
 } from "../fornax/index.js";
 import type { SessionRegistry } from "../themis/session-registry.js";
 import { gateAccountStatus } from "../themis/revocation.js";
+import { createLogger } from "@celestia/argus";
+
+const log = createLogger("atlas:zone");
 
 /** Deps handed to the room by the composition root (main.ts) via Colyseus define options — Colyseus
  *  instantiates rooms itself, so this is the DI injection point. */
@@ -77,7 +80,7 @@ export class ZoneRoom extends Room<ZoneState> {
     // listener proves signals fire.
     const sink = this.deps.makeEventSink(this.zone.id);
     const signals = new SignalBus();
-    signals.on(LEVER_TOGGLED, (s) => console.log(`[zone:${this.zone.id}] signal ${s.type}`, s.data));
+    signals.on(LEVER_TOGGLED, (s) => log.debug("signal", { zone: this.zone.id, type: s.type, data: s.data }));
     this.pipeline = new ActionPipeline([leverAction], sink, signals);
 
     // Seed one lever at the map centre (walkable in the dummy maps) — a POC interactable; real levers come from
@@ -100,7 +103,7 @@ export class ZoneRoom extends Room<ZoneState> {
     // Interactions run through Fornax (not applied here): the pipeline gates, executes, logs the event + signals.
     this.onMessage(INTERACT, (client: Client, cmd: InteractCommand) => {
       // Guard: a durable-append failure in the pipeline must LOG, not become an unhandled rejection (crash).
-      this.onInteract(client, cmd).catch((err) => console.error(`[zone:${this.zone.id}] interact failed:`, err));
+      this.onInteract(client, cmd).catch((err) => log.error("interact failed", { zone: this.zone.id }, err));
     });
 
     // Write-behind: periodically flush live positions to character_placement (also flushed on leave).
@@ -161,9 +164,14 @@ export class ZoneRoom extends Room<ZoneState> {
     };
     client.send(MSG.zoneMap, mapMsg);
 
-    console.log(
-      `[zone:${this.zone.id}] join ${client.sessionId} as ${auth.accountId} char=${auth.characterId} "${player.name}" (${this.state.players.size} present)`,
-    );
+    log.info("join", {
+      zone: this.zone.id,
+      session: client.sessionId,
+      account: auth.accountId,
+      character: auth.characterId,
+      name: player.name,
+      present: this.state.players.size,
+    });
   }
 
   async onLeave(client: Client) {
@@ -198,7 +206,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
   private flushAll(): void {
     for (const id of this.world.placement.keys()) {
-      this.flush(id).catch((err) => console.error(`[zone:${this.zone.id}] autosave flush failed:`, err));
+      this.flush(id).catch((err) => log.error("autosave flush failed", { zone: this.zone.id }, err));
     }
   }
 
@@ -229,7 +237,7 @@ export class ZoneRoom extends Room<ZoneState> {
         // rejected reserve/persist become an unhandled rejection that crashes the room.
         this.transfer(client, portal).catch((err) => {
           this.transferring.delete(client.sessionId);
-          console.error(`[zone:${this.zone.id}] zone transfer failed:`, err);
+          log.error("zone transfer failed", { zone: this.zone.id }, err);
         });
       }
     }

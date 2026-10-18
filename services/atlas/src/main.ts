@@ -14,8 +14,15 @@ import { ZoneRoom, type ZoneRoomDeps } from "./rooms/ZoneRoom.js";
 import { LobbyRoom, type LobbyRoomDeps } from "./janus/lobby.room.js";
 import { SessionRegistry } from "./themis/session-registry.js";
 import { DurableEventSink } from "./fornax/index.js";
+import { createLogger, configureLogging, type LogLevel } from "@celestia/argus";
+
+const log = createLogger("atlas");
+const LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error", "silent"];
 
 async function bootstrap(): Promise<void> {
+  // Switchable verbosity: LOG_LEVEL flips the Argus level at boot (default info); the sink can be swapped at
+  // runtime via configureLogging (e.g. to add an analytics sink later) with no call-site changes.
+  if (LEVELS.includes(process.env.LOG_LEVEL as LogLevel)) configureLogging({ level: process.env.LOG_LEVEL as LogLevel });
   const app = await NestFactory.create(AppModule, { logger: ["error", "warn", "log"] });
   app.enableShutdownHooks();
 
@@ -53,17 +60,17 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(process.env.PORT) || cfg.realtimePort;
   await app.listen(port, "0.0.0.0");
-  console.log(`[atlas] NestJS + Colyseus listening on :${port}  (GET /health)`);
+  log.info("listening (NestJS + Colyseus; GET /health)", { port });
 }
 
 // Backstop: a world server must not die from a transient fault in a floated promise (a timer or a
 // fire-and-forget message handler). Each such site also catches locally; this is defense in depth — a
 // registered handler keeps Node 22 from terminating on an otherwise-unhandled rejection.
 process.on("unhandledRejection", (reason) => {
-  console.error("[atlas] unhandledRejection (backstop):", reason);
+  log.error("unhandledRejection (backstop)", reason);
 });
 
 bootstrap().catch((err) => {
-  console.error("[atlas] failed to start:", err);
+  log.error("failed to start", err);
   process.exit(1);
 });
