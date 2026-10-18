@@ -87,6 +87,12 @@ export class WorldRegistry {
     if (!w) throw new Error(`caelum: no such world "${worldId}"`);
     return w.startingZoneId;
   }
+
+  /** Which world a zone belongs to (first match; falls back to the default world). */
+  worldIdOf(zoneId: string): string {
+    for (const w of this.worlds.values()) if (w.zoneIds.includes(zoneId)) return w.id;
+    return this.defaultWorldId;
+  }
 }
 
 /** The tile a world-unit position falls in (floor-division by tileSize). */

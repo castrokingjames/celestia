@@ -6,7 +6,9 @@
 import { Client, getStateCallbacks, type Room } from "colyseus.js";
 import {
   MSG,
+  NET_MSG,
   SESSION_MSG,
+  type PingMsg,
   type PlayEnterResult,
   type SeatReservation,
   type SessionStateMsg,
@@ -29,8 +31,10 @@ export interface ZoneHandlers {
   onLeverAdd(id: string, x: number, y: number, on: boolean): void;
   onLeverChange(id: string, on: boolean): void;
   onLeverRemove(id: string): void;
-  onMap(map: ZoneMapWire): void;
+  onMap(worldId: string, map: ZoneMapWire): void;
   onTransfer(zoneId: string, reservation: SeatReservation): void;
+  /** Reply to a latency probe: the client timestamp the server echoed back (RTT = clientNow − t). */
+  onPong(t: number): void;
 }
 
 /** A live connection to ONE zone room: wraps the colyseus Room, projecting it through ZoneHandlers. */
@@ -40,8 +44,9 @@ export class ZoneConnection {
     h: ZoneHandlers,
   ) {
     const selfId = room.sessionId;
-    room.onMessage(MSG.zoneMap, (m: ZoneMapMsg) => h.onMap(m.map));
+    room.onMessage(MSG.zoneMap, (m: ZoneMapMsg) => h.onMap(m.worldId, m.map));
     room.onMessage(MSG.zoneTransfer, (m: ZoneTransferMsg) => h.onTransfer(m.zoneId, m.seatReservation));
+    room.onMessage(NET_MSG.pong, (m: PingMsg) => h.onPong(m.t));
 
     const $ = getStateCallbacks(room);
     $(room.state).players.onAdd((p: any, id: string) => {
@@ -78,6 +83,10 @@ export class ZoneConnection {
   }
   sendInteract(targetId: string): void {
     this.room.send("interact", { targetId });
+  }
+  /** Send a latency probe carrying a client timestamp; the server echoes it → onPong computes RTT. */
+  sendPing(t: number): void {
+    this.room.send(NET_MSG.ping, { t });
   }
   leave(): void {
     void this.room.leave();

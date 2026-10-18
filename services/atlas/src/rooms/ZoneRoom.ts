@@ -1,6 +1,7 @@
-// The authoritative zone room — 20 Hz FIXED tick (docs/REALTIME.md §2-3). The server owns truth; the client
-// sends typed input commands and predicts/reconciles locally. The room owns a World (entity + component store,
-// incl. this zone's collision map from Caelum) and a fixed list of Systems; each 20 Hz step advances the server
+// The authoritative zone room — fixed-timestep tick at the zone's configured tickHz (Caelum zone.json;
+// docs/REALTIME.md §2-3). The server owns truth; the client sends typed input commands and predicts/reconciles
+// locally. The room owns a World (entity + component store, incl. this zone's collision map from Caelum) and a
+// fixed list of Systems; each step advances the server
 // clock, runs every System in order (docs/PLATFORM.md §2), then checks portal crossings. Movement lives in
 // MovementSystem; inputs are QUEUED on the World and drained there. The zone is PARAMETERIZED: a per-instance
 // zoneId (set when the seat is created) picks the zone from the Caelum registry — map, spawns, portals
@@ -10,8 +11,10 @@ import { Room, Client } from "@colyseus/core";
 import { ZoneState, Player, LeverState } from "../schema/ZoneState.js";
 import {
   MSG,
+  NET_MSG,
   type InputCommand,
   type InteractCommand,
+  type PingMsg,
   type SeatReservation,
   type ZoneMapMsg,
   type ZoneSeatAuth,
@@ -52,8 +55,6 @@ export type ZoneRoomDeps = {
   zoneId?: string;
 };
 
-const TICK_HZ = 20;
-const TICK_MS = 1000 / TICK_HZ;
 // How close (world units) a player must be to a lever to interact — the Fornax `qualify` reach gate (~1.5 tiles).
 const INTERACT_REACH = 48;
 
@@ -63,6 +64,7 @@ export class ZoneRoom extends Room<ZoneState> {
   private systems: System[] = [];
   private deps!: ZoneRoomDeps;
   private zone!: ZoneDef;
+  private tickMs!: number; // fixed timestep (ms) — derived from the zone's configured tickHz (Caelum)
   private pipeline!: ActionPipeline<ZoneInteractions>;
   private autosaveTimer?: ReturnType<typeof setInterval>;
   // Sessions mid-transfer to another zone — skip their portal re-check until they leave.
@@ -71,6 +73,10 @@ export class ZoneRoom extends Room<ZoneState> {
   async onCreate(options: ZoneRoomDeps) {
     this.deps = options;
     this.zone = options.registry.requireZone(options.zoneId ?? options.registry.startingZoneId());
+    // Integer fixed-timestep from zone config: round to whole ms so the sim clock (state.t) — the event-log `at`
+    // timestamp (bigint) AND the interpolation timeline — stays integer and drift-free. A non-divisor tickHz
+    // (e.g. 60 → 17ms ≈ 58.8 Hz) runs at the nearest whole-ms rate; the HUD shows the real value.
+    this.tickMs = Math.max(1, Math.round(1000 / this.zone.tickHz));
     this.setState(new ZoneState());
     this.world = new World(this.state, this.zone.map);
     this.systems = [new MovementSystem()];
@@ -91,8 +97,8 @@ export class ZoneRoom extends Room<ZoneState> {
     seed.y = (Math.floor(this.zone.map.height / 2) + 0.5) * this.zone.map.tileSize;
     this.state.levers.set(seed.id, seed);
 
-    this.setSimulationInterval(() => this.step(), TICK_MS);
-    this.setPatchRate(TICK_MS);
+    this.setSimulationInterval(() => this.step(), this.tickMs);
+    this.setPatchRate(this.tickMs);
 
     // QUEUE inputs on the World — MovementSystem drains them on the fixed tick (decoupled from arrival jitter).
     this.onMessage("input", (client: Client, cmd: InputCommand) => {
@@ -105,6 +111,10 @@ export class ZoneRoom extends Room<ZoneState> {
       // Guard: a durable-append failure in the pipeline must LOG, not become an unhandled rejection (crash).
       this.onInteract(client, cmd).catch((err) => log.error("interact failed", { zone: this.zone.id }, err));
     });
+
+    // Latency probe: echo the client's timestamp straight back so the SDK can measure RTT. Stateless + opaque —
+    // the server never interprets `t`, so this adds no wall-clock to the sim (G9).
+    this.onMessage(NET_MSG.ping, (client: Client, m: PingMsg) => client.send(NET_MSG.pong, m));
 
     // Write-behind: periodically flush live positions to character_placement (also flushed on leave).
     this.autosaveTimer = setInterval(() => this.flushAll(), this.deps.autosaveIntervalSec * 1000);
@@ -159,6 +169,7 @@ export class ZoneRoom extends Room<ZoneState> {
 
     // Hand the map to the client to render (floor + boxes + portals) — a one-shot message, not synced state.
     const mapMsg: ZoneMapMsg = {
+      worldId: this.deps.registry.worldIdOf(this.zone.id),
       zoneId: this.zone.id,
       map: { width: map.width, height: map.height, tileSize: map.tileSize, tiles: map.tiles, portals: map.portals },
     };
@@ -216,10 +227,10 @@ export class ZoneRoom extends Room<ZoneState> {
     if (ref && p) await this.deps.repo.savePlacement(ref.characterId, ref.zoneId, p.x, p.y);
   }
 
-  // Fixed 20 Hz step: advance the server clock, run every System, then check for portal crossings.
+  // Fixed-timestep step (zone's configured tickHz): advance the server clock, run every System, then check portals.
   private step() {
-    this.state.t += TICK_MS;
-    const ctx: TickContext = { dtMs: TICK_MS, tMs: this.state.t };
+    this.state.t += this.tickMs;
+    const ctx: TickContext = { dtMs: this.tickMs, tMs: this.state.t };
     for (const s of this.systems) s.update(this.world, ctx);
     this.checkPortals();
   }

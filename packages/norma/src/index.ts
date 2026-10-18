@@ -2,7 +2,7 @@
 // Imported by services (and later codegen'd into client/addons/jupiter/.../celestia_contract.gd — docs/CLIENT-SDK.md §6).
 
 /** Bumped on ANY wire-shape change; the client sends this at connect and the server rejects a mismatch. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Intent types the client may send (the server re-validates every one — client is never trusted). */
 export const INTENT_TYPES = ["input", "attack", "interact"] as const;
@@ -87,6 +87,18 @@ export const MSG = {
   // dialogue.*, etc. added later
 } as const;
 
+/** Latency probe (round-trip time). c→s on `ping` with a client-local timestamp; the server echoes the SAME
+ *  value straight back on `pong`. NOT a game intent — a transport diagnostic the SDK uses to compute RTT
+ *  (RTT = clientNow − echoed t). The timestamp is opaque to the server, which never interprets it, so this
+ *  adds no wall-clock to the sim (G9). */
+export const NET_MSG = {
+  ping: "net.ping", // c→s { t } — client-local send time
+  pong: "net.pong", // s→c { t } — echoed verbatim
+} as const;
+
+/** c↔s latency-probe payload: the client's send timestamp, echoed verbatim by the server. */
+export type PingMsg = { t: number };
+
 /** The zone's dummy map on the wire — enough to render floor + boxes + portal markers (no server-only spawn
  *  table). Tiles are [y][x], 0=walkable 1=box; portal coords are TILE units (world = tile * tileSize). */
 export type ZoneMapWire = {
@@ -98,7 +110,7 @@ export type ZoneMapWire = {
 };
 
 /** s→c on zone join: which zone + its map to render. */
-export type ZoneMapMsg = { zoneId: string; map: ZoneMapWire };
+export type ZoneMapMsg = { worldId: string; zoneId: string; map: ZoneMapWire };
 
 /** s→c when you step on a portal: a seat reservation into the next zone — consume it (and leave the current
  *  zone room) to cross. Atlas-internal, the same mechanic as lobby enter (docs/REFACTOR.md S2 move 5). */
