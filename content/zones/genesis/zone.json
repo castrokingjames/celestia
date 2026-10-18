@@ -1,0 +1,7 @@
+{
+  "id": "genesis",
+  "name": "Genesis Fields",
+  "tickHz": 20,
+  "maxPerChannel": 200,
+  "map": "map.json"
+}

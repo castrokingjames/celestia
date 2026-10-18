@@ -1,5 +1,5 @@
 {
-  "_comment": "Non-secret SERVER config (dev defaults). SECRETS (JWT keys, DB/Redis creds, Discord secret) come from env — see datastores.*Env + .env, never inline here. Shared values the client also needs (e.g. MOVE_SPEED, intent types) live in packages/net-contract. Game-balance DATA (combat/mobs/loot) lives with the GameModule. Later: a zod-validated loader (@celestia/config) + per-env overrides (dev/staging/prod) that merge env secrets on top.",
+  "_comment": "Non-secret SERVER config (dev defaults). SECRETS (JWT keys, DB/Redis creds, Discord secret) come from env — see datastores.*Env + .env, never inline here. Shared values the client also needs (e.g. MOVE_SPEED, intent types) live in packages/norma. Game-balance DATA (combat/mobs/loot) lives with the GameModule. Later: a zod-validated loader (@celestia/config) + per-env overrides (dev/staging/prod) that merge env secrets on top.",
 
   "env": "dev",
 
@@ -7,10 +7,13 @@
     "port": 2567,
     "tickHz": 20,
     "patchRateHz": 20,
-    "maxClientsPerChannel": 1000
+    "maxClientsPerChannel": 1000,
+    "publicUrl": "ws://localhost:2567",
+    "autosaveIntervalSec": 15,
+    "revocationSweepSec": 10
   },
 
-  "meta": {
+  "polaris": {
     "port": 3000,
     "corsOrigins": ["http://localhost:5173", "http://127.0.0.1:5173", "https://celestia-flaa.onrender.com"]
   },
@@ -19,12 +22,19 @@
     "enabledMethods": ["basic"],
     "accessTokenTtlSec": 900,
     "refreshTokenTtlSec": 2592000,
-    "connectTicketTtlSec": 30,
+    "accessTicketTtlSec": 30,
     "discord": { "enabled": false, "guildId": "" }
+  },
+
+  "game": {
+    "maxCharactersPerAccount": 5,
+    "startingZoneId": "genesis"
   },
 
   "datastores": {
     "postgresUrlEnv": "DATABASE_URL",
+    "polarisPostgresUrlEnv": "POLARIS_DATABASE_URL",
+    "atlasPostgresUrlEnv": "ATLAS_DATABASE_URL",
     "valkeyUrlEnv": "VALKEY_URL"
   },
 

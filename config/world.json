@@ -1,0 +1,13 @@
+{
+  "_comment": "World/topology MANIFEST — read by Caelum at boot (packages/firmament/src/caelum). Thin on purpose: which worlds exist, each world's zone list + starting zone. Per-zone detail (tick, map, spawns, portals) lives in content/zones/<id>/. Caelum validates the whole graph at boot (every zone has a bundle + map; every portal resolves to a real zone + named spawn) — dangling topology fails boot. docs/REFACTOR.md S2.",
+
+  "defaultWorldId": "celestia",
+
+  "worlds": {
+    "celestia": {
+      "name": "Celestia",
+      "startingZoneId": "genesis",
+      "zones": ["genesis", "verdant"]
+    }
+  }
+}

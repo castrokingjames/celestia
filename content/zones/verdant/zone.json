@@ -1,0 +1,7 @@
+{
+  "id": "verdant",
+  "name": "Verdant Hollow",
+  "tickHz": 20,
+  "maxPerChannel": 200,
+  "map": "map.json"
+}
