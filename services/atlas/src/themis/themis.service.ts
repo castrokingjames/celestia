@@ -18,7 +18,9 @@ export class ThemisService implements OnApplicationBootstrap, OnModuleDestroy {
 
   constructor(
     @Inject(REPOSITORY) private readonly repo: Pick<Repository, "getAccountStatuses">,
-    private readonly registry: SessionRegistry,
+    // Explicit token (not bare type-based DI): Atlas runs under tsx/esbuild, which doesn't emit the
+    // `design:paramtypes` metadata Nest needs to resolve a param by its type — so this must name its token.
+    @Inject(SessionRegistry) private readonly registry: SessionRegistry,
     @Inject(ConfigService) private readonly config: ConfigService,
   ) {}
 
