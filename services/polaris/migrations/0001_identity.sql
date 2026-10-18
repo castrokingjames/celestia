@@ -10,7 +10,7 @@
 -- role: the user-tier vocabulary (the "elements" scheme — deliberately NOT celestial, so a
 -- role can never be mistaken for a subsystem codename). Seeded here so reserving a future role
 -- is a ROW, not a migration: active=false means reserved/not-yet-grantable; promote by flipping
--- the flag. Roles are a FLAT vocabulary, not a power ladder — can() resolves capabilities per role.
+-- the flag. Roles are a FLAT vocabulary, not a power ladder — allow() resolves capabilities per role.
 create table role (
   id          text primary key,
   element     text not null,

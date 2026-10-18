@@ -2,9 +2,9 @@
 //
 // A login method implements this port; the auth CORE (account find-or-create + session
 // issuance) never changes when you add Discord/Google/Steam/wallet — you add a new adapter.
-// This is AUTHENTICATION ONLY ("who are you"), never AUTHORIZATION ("what may you do" -> can()).
+// This is AUTHENTICATION ONLY ("who are you"), never AUTHORIZATION ("what may you do" -> allow()).
 // A method NEVER issues sessions, NEVER touches accounts, NEVER decides permissions
-// (guardrails #6 can()-deny-by-default, #7 ports/adapters).
+// (guardrails #6 allow()-deny-by-default, #7 ports/adapters).
 
 /** The verified result of a successful login, normalized across every method. */
 export interface VerifiedIdentity {

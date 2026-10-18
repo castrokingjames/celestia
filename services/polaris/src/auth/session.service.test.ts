@@ -1,88 +1,65 @@
-// SessionService acceptance tests against the REAL Postgres + the dev keypair in .env
-// (run `pnpm --filter @celestia/polaris gen-dev-keys` + `migrate` first). when/then naming.
+// Acceptance tests for session-first SessionService against the REAL Postgres (run `pnpm --filter
+// @celestia/polaris migrate` first). The badge signer is STUBBED (so the test is pure + needs no keys);
+// the EdDSA sign/verify crypto is TicketService's concern. Data access via the one Repository (Kysely
+// adapter). Naming: it("when <condition>, then <outcome>").
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { config } from "../config.js";
-import { createDb } from "../db/client.js";
-import { KyselyAccountStore } from "../accounts/kysely-account.store.js";
-import { findOrCreateAccount } from "../accounts/account.service.js";
-import { KyselyRefreshStore } from "./kysely-refresh.store.js";
+import { createDb, KyselyRepository } from "@celestia/firmament";
 import { SessionService } from "./session.service.js";
-import { jwtVerify, importSPKI } from "jose";
-import { CONNECT_TICKET_AUD } from "@celestia/net-contract";
 
 const db = createDb();
-const accounts = new KyselyAccountStore(db);
-const svc = new SessionService({
-  privateKeyPem: config.jwtPrivateKeyPem,
-  publicKeyPem: config.jwtPublicKeyPem,
-  pepper: config.authTokenPepper,
-  accessTtlSec: config.accessTokenTtlSec,
-  refreshTtlSec: config.refreshTokenTtlSec,
-  connectTicketTtlSec: config.connectTicketTtlSec,
-  refreshStore: new KyselyRefreshStore(db),
-  accounts,
-});
+const repo = new KyselyRepository(db);
 
-const newAccount = async () =>
-  (await findOrCreateAccount(accounts, { method: "basic", externalId: `s_${randomUUID()}` })).account;
+let lastSigned: { accountId: string; role: string } | undefined;
+const tickets = {
+  async signAccessToken(claims: { accountId: string; role: string }): Promise<string> {
+    lastSigned = claims;
+    return `fake.access.badge.${claims.accountId}`;
+  },
+};
+
+const makeSessions = () =>
+  new SessionService({ pepper: "test-pepper", refreshTtlSec: 3600, accessTicketTtlSec: 30, repo, tickets });
+
+const freshAccount = () => repo.createAccountWithIdentity({ method: "basic", externalId: `t_${randomUUID()}` });
 
 after(async () => {
   await db.destroy();
 });
 
-describe("SessionService", () => {
-  it("when a session is issued, then the access token verifies with the public key and carries sub + role", async () => {
-    const account = await newAccount();
-    const { accessToken } = await svc.issue(account);
-    const claims = await svc.verifyAccess(accessToken);
-    assert.equal(claims.sub, account.id);
-    assert.equal(claims.role, "terra");
+describe("SessionService (session-first)", () => {
+  it("when a session is issued, then it returns a rotating refresh + a one-time access badge (no access token)", async () => {
+    const acc = await freshAccount();
+    const session = await makeSessions().issue(acc);
+    assert.ok(session.refreshToken, "has a refresh token");
+    assert.equal(session.accessBadge, `fake.access.badge.${acc.id}`);
+    assert.deepEqual(lastSigned, { accountId: acc.id, role: acc.role }, "badge signed with authoritative role");
+    assert.ok(!("accessToken" in session), "no reusable access token is issued");
   });
 
-  it("when an access token is tampered, then verification is rejected", async () => {
-    const account = await newAccount();
-    const { accessToken } = await svc.issue(account);
-    const parts = accessToken.split(".");
-    // Corrupt the FIRST signature char — fully significant, so the bytes always change (the last
-    // base64url char only carries padding bits for a 64-byte sig, which made this flaky).
-    parts[2] = (parts[2][0] === "A" ? "B" : "A") + parts[2].slice(1);
-    await assert.rejects(() => svc.verifyAccess(parts.join(".")));
+  it("when a refresh token is exchanged, then it rotates to a new token and mints a new session", async () => {
+    const acc = await freshAccount();
+    const s = makeSessions();
+    const first = await s.issue(acc);
+    const { session: second } = await s.refresh(first.refreshToken);
+    assert.notEqual(second.refreshToken, first.refreshToken, "refresh rotates");
+    assert.ok(second.accessBadge, "a new access badge is minted on refresh");
   });
 
-  it("when a refresh token is exchanged, then it rotates to a new token and the chain continues", async () => {
-    const account = await newAccount();
-    const { refreshToken: r0 } = await svc.issue(account);
-    const { tokens: t1 } = await svc.refresh(r0);
-    assert.notEqual(t1.refreshToken, r0, "a new refresh token is issued");
-    const { tokens: t2 } = await svc.refresh(t1.refreshToken);
-    assert.ok(t2.accessToken, "the rotated token keeps working");
+  it("when a spent refresh token is replayed, then reuse is detected and the chain is rejected", async () => {
+    const acc = await freshAccount();
+    const s = makeSessions();
+    const first = await s.issue(acc);
+    await s.refresh(first.refreshToken);
+    await assert.rejects(() => s.refresh(first.refreshToken), /reuse detected/);
   });
 
-  it("when a spent refresh token is replayed, then reuse is detected and rejected", async () => {
-    const account = await newAccount();
-    const { refreshToken: r0 } = await svc.issue(account);
-    await svc.refresh(r0); // r0 is now rotated/spent
-    await assert.rejects(() => svc.refresh(r0), /reuse/, "replaying the spent token is rejected");
-  });
-
-  it("when a connect-ticket is issued, then it verifies with aud=realtime and carries the account", async () => {
-    const account = await newAccount();
-    const { ticket, expiresInSec } = await svc.issueConnectTicket(account);
-    assert.ok(expiresInSec > 0);
-    const { payload } = await jwtVerify(ticket, await importSPKI(config.jwtPublicKeyPem, "EdDSA"), {
-      audience: CONNECT_TICKET_AUD,
-      algorithms: ["EdDSA"],
-    });
-    assert.equal(payload.sub, account.id);
-    assert.equal(payload.role, "terra");
-  });
-
-  it("when the account is suspended, then refresh is rejected", async () => {
-    const account = await newAccount();
-    const { refreshToken } = await svc.issue(account);
-    await db.updateTable("account").set({ status: "suspended" }).where("id", "=", account.id).execute();
-    await assert.rejects(() => svc.refresh(refreshToken), /not active/, "a suspended account can't refresh");
+  it("when the account is suspended, then refresh is rejected (ban-takes-effect-on-refresh)", async () => {
+    const acc = await freshAccount();
+    const s = makeSessions();
+    const first = await s.issue(acc);
+    await db.updateTable("account").set({ status: "suspended" }).where("id", "=", acc.id).execute();
+    await assert.rejects(() => s.refresh(first.refreshToken), /not active/);
   });
 });
