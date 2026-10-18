@@ -9,6 +9,7 @@
     "dev": "node --env-file=../../.env --watch --import tsx src/main.ts",
     "prestart": "tsx src/db/migrate.ts",
     "start": "tsx src/main.ts",
+    "db:init": "node --env-file-if-exists=../../.env --import tsx scripts/db-init.ts",
     "migrate": "node --env-file=../../.env --import tsx src/db/migrate.ts",
     "gen-dev-keys": "node --import tsx scripts/gen-dev-keys.ts",
     "grant": "node --env-file=../../.env --import tsx scripts/grant.ts",
