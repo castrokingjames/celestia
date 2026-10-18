@@ -1,0 +1,20 @@
+{
+  "name": "@celestia/argus",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "description": "Argus — the switchable logging port (docs/NAMING.md). createLogger(scope) + a swappable LogSink behind it (ConsoleSink default · NullSink · MultiSink). configureLogging({level,sink}) flips verbosity or routes to an analytics/tracker sink at runtime with ZERO call-site changes (G7). Zero-dependency + framework-agnostic: server (NestJS/Colyseus) and client (Jupiter) both use it.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test 'src/**/*.test.ts'"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

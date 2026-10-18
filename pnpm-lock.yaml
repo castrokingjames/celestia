@@ -20,12 +20,9 @@ importers:
 
   client/phaethon:
     dependencies:
-      '@celestia/norma':
+      '@celestia/jupiter':
         specifier: workspace:*
-        version: link:../../packages/norma
-      colyseus.js:
-        specifier: ^0.16.0
-        version: 0.16.22
+        version: link:../../packages/jupiter
       phaser:
         specifier: ^3.80.0
         version: 3.90.0
@@ -42,6 +39,18 @@ importers:
       vite:
         specifier: ^6.0.0
         version: 6.4.4(@types/node@22.20.5)(tsx@4.23.15)
+
+  packages/argus:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
+      tsx:
+        specifier: ^4.19.0
+        version: 4.23.15
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
 
   packages/firmament:
     dependencies:
@@ -77,6 +86,28 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/jupiter:
+    dependencies:
+      '@celestia/argus':
+        specifier: workspace:*
+        version: link:../argus
+      '@celestia/norma':
+        specifier: workspace:*
+        version: link:../norma
+      colyseus.js:
+        specifier: ^0.16.0
+        version: 0.16.22
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
+      tsx:
+        specifier: ^4.19.0
+        version: 4.23.15
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/norma:
     devDependencies:
       typescript:
@@ -85,6 +116,9 @@ importers:
 
   services/atlas:
     dependencies:
+      '@celestia/argus':
+        specifier: workspace:*
+        version: link:../../packages/argus
       '@celestia/firmament':
         specifier: workspace:*
         version: link:../../packages/firmament
@@ -131,6 +165,9 @@ importers:
 
   services/polaris:
     dependencies:
+      '@celestia/argus':
+        specifier: workspace:*
+        version: link:../../packages/argus
       '@celestia/firmament':
         specifier: workspace:*
         version: link:../../packages/firmament
