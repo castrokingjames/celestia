@@ -11,8 +11,7 @@
     "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
-    "@celestia/norma": "workspace:*",
-    "colyseus.js": "^0.16.0",
+    "@celestia/jupiter": "workspace:*",
     "phaser": "^3.80.0"
   },
   "devDependencies": {

@@ -1,0 +1,25 @@
+{
+  "name": "@celestia/jupiter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "description": "Jupiter — the framework-agnostic TypeScript client SDK (docs/NAMING.md, docs/CLIENT-SDK.md). Owns the Atlas transport (colyseus is contained in europa) + the netcode (ganymede: prediction/reconciliation/interpolation) and exposes a renderer-agnostic facade: the game touches ONLY Jupiter — never colyseus, never a wss URL. Mirrors the Godot/GDScript Jupiter on the shared @celestia/norma wire contract.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@celestia/norma": "workspace:*",
+    "@celestia/argus": "workspace:*",
+    "colyseus.js": "^0.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
