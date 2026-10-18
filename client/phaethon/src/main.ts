@@ -8,11 +8,25 @@ import { Jupiter, type World, type LeverView, type PlayerView, type ZoneMapWire 
 
 const POLARIS_URL = (import.meta.env.VITE_POLARIS_URL as string) ?? "http://127.0.0.1:3000";
 const ATLAS_URL = (import.meta.env.VITE_ATLAS_URL as string) ?? "ws://127.0.0.1:2567";
-const DEMO_USER = (import.meta.env.VITE_DEMO_USER as string) ?? "neo";
 const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-dev";
 const VIEW_W = 800, VIEW_H = 600;
 const DT_MAX = 0.05;
 const INTERACT_REACH = 48;
+
+// Per-TAB account so you can open several tabs as different players — the server enforces one live session per
+// account (it displaces the older one, close code 4409). `?user=NAME` pins an explicit account; otherwise each
+// tab gets a stable random name kept in sessionStorage (survives reload of that tab, differs across tabs).
+function resolveDemoUser(prefix: string): string {
+  const fromUrl = new URLSearchParams(location.search).get("user");
+  if (fromUrl) return fromUrl;
+  const envUser = import.meta.env.VITE_DEMO_USER as string | undefined;
+  if (envUser) return envUser;
+  const existing = sessionStorage.getItem("celestia:demo-user");
+  if (existing) return existing;
+  const generated = `${prefix}-${Math.random().toString(36).slice(2, 6)}`;
+  sessionStorage.setItem("celestia:demo-user", generated);
+  return generated;
+}
 
 type Sprite = { rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text };
 
@@ -25,6 +39,7 @@ class ZoneScene extends Phaser.Scene {
   private offY = VIEW_H / 2;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private status!: Phaser.GameObjects.Text;
+  private pingText!: Phaser.GameObjects.Text;
   private selfRect?: Phaser.GameObjects.Rectangle;
   private selfLabel?: Phaser.GameObjects.Text;
 
@@ -32,16 +47,18 @@ class ZoneScene extends Phaser.Scene {
 
   create() {
     this.status = this.add.text(8, 8, "logging in…", { color: "#9ca3af", fontSize: "14px" });
+    this.pingText = this.add.text(VIEW_W - 8, 8, "", { color: "#9ca3af", fontSize: "14px" }).setOrigin(1, 0);
     this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,LEFT,DOWN,RIGHT,E") as Record<string, Phaser.Input.Keyboard.Key>;
     void this.connect();
   }
 
   private async connect() {
+    const user = resolveDemoUser("neo");
     const jupiter = new Jupiter({ polarisUrl: POLARIS_URL, atlasUrl: ATLAS_URL });
-    await jupiter.login(DEMO_USER, DEMO_SECRET);
+    await jupiter.login(user, DEMO_SECRET);
     const world = await jupiter.enter();
     this.world = world;
-    this.status.setText(`in ${world.zoneId}  (green=you · blue=others · E=interact)`);
+    this.status.setText(`${user} · green=you · blue=others · E=interact`);
     this.selfRect = this.add.rectangle(0, 0, 24, 24, 0x4ade80);
     this.selfLabel = this.add.text(0, 0, "you", { color: "#4ade80", fontSize: "11px" }).setOrigin(0.5, 1);
 
@@ -63,10 +80,7 @@ class ZoneScene extends Phaser.Scene {
       this.leverRects.get(id)?.destroy();
       this.leverRects.delete(id);
     });
-    world.on("zoneChange", (zoneId: string) => {
-      this.resetGraphics();
-      this.status.setText(`in ${zoneId}  (green=you · blue=others · E=interact)`);
-    });
+    world.on("zoneChange", () => this.resetGraphics()); // world/zone label is driven per-frame in update()
   }
 
   private makeSprite(name: string): Sprite {
@@ -120,6 +134,7 @@ class ZoneScene extends Phaser.Scene {
       if (near) w.interact(near);
     }
     w.tick(); // advance prediction + interpolation
+    this.pingText.setText(`${w.worldId}/${w.zoneId} · ${w.ping}ms · tick ${w.patchMs}ms · buf ${w.interpMs}ms`);
 
     if (this.selfRect) { this.selfRect.x = w.self.x + this.offX; this.selfRect.y = w.self.y + this.offY; }
     if (this.selfLabel) { this.selfLabel.x = w.self.x + this.offX; this.selfLabel.y = w.self.y + this.offY - 16; }
