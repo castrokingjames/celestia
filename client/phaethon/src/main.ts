@@ -1,26 +1,29 @@
 // Celestia netcode POC — Vite + Phaser + colyseus.js against services/atlas.
-// Throwaway harness to iron out movement → interactions → interp/sync/reconciliation (docs/REALTIME.md §3),
-// then rebuild on Godot. Shares the SAME wire contract as the server (no codegen — TS↔TS).
+// Throwaway harness to iron out the flow + movement/interp/reconciliation (docs/REALTIME.md §3), then rebuild
+// on Godot. Shares the SAME wire contract as the server (no codegen — TS↔TS).
 //
-// Flow (session-first, docs/CHARACTERS.md): login → bound session (Polaris) → create/select a character →
-// play.enter → connect Atlas with the one-time zone ticket. P1 netcode: SELF is client-predicted +
-// server-reconciled; OTHERS are entity-interpolated on the server clock.
+// Flow (badge-first, docs/REFACTOR.md S1): login (Polaris REST) → one access badge → ONE Colyseus connection to
+// Atlas → Janus lobby (character select/create) → play.enter → consume the seat reservation to join the zone
+// room. P1 netcode: SELF is client-predicted + server-reconciled; OTHERS are entity-interpolated on the server
+// clock. The zone hands its Caelum map (floor + boxes + portals) on join; a lever is the first interaction.
 import Phaser from "phaser";
 import { Client, getStateCallbacks, type Room } from "colyseus.js";
-import { PROTOCOL_VERSION, MOVE_SPEED, type InputCommand } from "@celestia/norma";
-import { login, SessionConnection, type PlayEnterResult, type SessionStateMsg } from "./sdk/session.js";
+import { MOVE_SPEED, MSG, type InputCommand, type ZoneMapMsg, type ZoneTransferMsg } from "@celestia/norma";
+import { login, Lobby, type PlayEnterResult } from "./sdk/session.js";
 
 const POLARIS_URL = (import.meta.env.VITE_POLARIS_URL as string) ?? "http://127.0.0.1:3000";
-const POLARIS_WS = POLARIS_URL.replace(/^http/, "ws"); // session gateway shares Polaris's port
+const ATLAS_URL = (import.meta.env.VITE_ATLAS_URL as string) ?? "ws://127.0.0.1:2567";
 const DEMO_USER = (import.meta.env.VITE_DEMO_USER as string) ?? "neo";
 const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-dev";
-const ORIGIN_X = 400, ORIGIN_Y = 300; // center world (0,0) in the 800x600 view
+const VIEW_W = 800, VIEW_H = 600;
 const DT_MAX = 0.05;
 const INTERP_DELAY_MS = 300; // render remotes this far behind the SERVER clock, between two snapshots (jitter buffer)
 const EXTRAP_MAX_MS = 150;   // on buffer underflow (server stalled), extrapolate last velocity up to this, then hold
+const INTERACT_REACH = 48;   // match the server's Fornax qualify reach gate
 
 type Snap = { t: number; x: number; y: number };
 type View = { rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text; buf: Snap[] };
+type LeverView = { rect: Phaser.GameObjects.Rectangle; x: number; y: number };
 
 function applyCmd(pos: { x: number; y: number }, c: InputCommand): void {
   const len = Math.hypot(c.dx, c.dy);
@@ -31,9 +34,14 @@ function applyCmd(pos: { x: number; y: number }, c: InputCommand): void {
 }
 
 class ZoneScene extends Phaser.Scene {
-  private room!: Room;
+  private client!: Client;
+  private room?: Room;
   private views = new Map<string, View>(); // OTHER players (interpolated)
-  private clockOffset = NaN; // smoothed estimate of (serverTime − localTime); serverNow ≈ performance.now() + clockOffset
+  private levers = new Map<string, LeverView>();
+  private mapGfx?: Phaser.GameObjects.Graphics;
+  private offX = VIEW_W / 2; // world (0,0) screen offset — recomputed to centre each zone's map
+  private offY = VIEW_H / 2;
+  private clockOffset = NaN;
   private selfId = "";
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private status!: Phaser.GameObjects.Text;
@@ -41,15 +49,15 @@ class ZoneScene extends Phaser.Scene {
   // self prediction state
   private selfRect?: Phaser.GameObjects.Rectangle;
   private selfLabel?: Phaser.GameObjects.Text;
-  private self = { x: 0, y: 0 };      // predicted position
+  private self = { x: 0, y: 0 };
   private seq = 0;
-  private pending: InputCommand[] = []; // commands sent but not yet acked by the server
+  private pending: InputCommand[] = [];
 
   constructor() { super("zone"); }
 
   create() {
     this.status = this.add.text(8, 8, "logging in…", { color: "#9ca3af", fontSize: "14px" });
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,LEFT,DOWN,RIGHT") as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,LEFT,DOWN,RIGHT,E") as Record<string, Phaser.Input.Keyboard.Key>;
     void this.connect();
   }
 
@@ -57,51 +65,66 @@ class ZoneScene extends Phaser.Scene {
     return this.add.text(0, 0, name || "…", { color, fontSize: "11px" }).setOrigin(0.5, 1);
   }
 
+  // login → badge → ONE Atlas connection → Janus lobby → select/create → play.enter → consume the reservation.
   private async connect() {
-    // Session-first: login → bound session → create a character if none → play.enter → zone ticket.
-    const { sessionTicket } = await login(POLARIS_URL, DEMO_USER, DEMO_SECRET);
-    const session = new SessionConnection(POLARIS_WS, sessionTicket);
-    await session.ready();
+    const { accessBadge } = await login(POLARIS_URL, DEMO_USER, DEMO_SECRET);
+    this.client = new Client(ATLAS_URL);
+    const lobby = await Lobby.open(this.client, accessBadge);
     this.status.setText("choosing character…");
     const enter: PlayEnterResult = await new Promise((resolve) => {
-      session.onState((state: SessionStateMsg) => {
-        if (state.characters.length === 0) session.create(`Hero_${Math.random().toString(36).slice(2, 7)}`);
-        else void session.enter(state.characters[0].id).then(resolve);
+      lobby.onState((state) => {
+        if (state.characters.length === 0) lobby.create(`Hero_${Math.random().toString(36).slice(2, 7)}`);
+        else void lobby.enter(state.characters[0].id).then(resolve);
       });
     });
-    session.close();
+    lobby.leave(); // drop the lobby presence before the zone registers (avoids a spurious one-session displace)
+    const room = await this.client.consumeSeatReservation(
+      enter.seatReservation as unknown as Parameters<Client["consumeSeatReservation"]>[0],
+    );
+    this.enterZone(room, enter.zoneId);
+  }
 
-    // Connect to the resolved zone with the one-time zone ticket (Atlas rejects joins without it).
-    const client = new Client(enter.realtimeUrl);
-    this.room = await client.joinOrCreate("zone", { protocolVersion: PROTOCOL_VERSION, ticket: enter.zoneTicket });
-    this.selfId = this.room.sessionId;
-    this.status.setText(`in ${enter.zoneId} · ${this.selfId}  (green=you · blue=others)`);
+  // Wire up a freshly-joined zone room (first entry AND after a portal transfer).
+  private enterZone(room: Room, zoneId: string): void {
+    this.resetScene();
+    this.room = room;
+    this.selfId = room.sessionId;
+    this.status.setText(`in ${zoneId} · ${this.selfId}  (green=you · blue=others · E=interact)`);
 
-    const $ = getStateCallbacks(this.room);
-    $(this.room.state).players.onAdd((player: any, id: string) => {
+    room.onMessage(MSG.zoneMap, (m: ZoneMapMsg) => this.drawMap(m));
+    room.onMessage(MSG.zoneTransfer, (m: ZoneTransferMsg) => void this.handleTransfer(m));
+
+    const $ = getStateCallbacks(room);
+    $(room.state).players.onAdd((player: any, id: string) => {
       if (id === this.selfId) {
         this.self = { x: player.x, y: player.y };
-        this.selfRect = this.add.rectangle(this.self.x + ORIGIN_X, this.self.y + ORIGIN_Y, 24, 24, 0x4ade80);
+        this.selfRect = this.add.rectangle(this.self.x + this.offX, this.self.y + this.offY, 24, 24, 0x4ade80);
         this.selfLabel = this.label(player.name, "#4ade80");
         $(player).onChange(() => this.reconcile(player.x, player.y, player.lastSeq));
       } else {
-        const rect = this.add.rectangle(player.x + ORIGIN_X, player.y + ORIGIN_Y, 24, 24, 0x60a5fa);
+        const rect = this.add.rectangle(player.x + this.offX, player.y + this.offY, 24, 24, 0x60a5fa);
         this.views.set(id, { rect, label: this.label(player.name, "#60a5fa"), buf: [] });
-        // remote snapshots are sampled per-patch on the SERVER clock in room.onStateChange (below).
       }
     });
-    $(this.room.state).players.onRemove((_p: any, id: string) => {
+    $(room.state).players.onRemove((_p: any, id: string) => {
       const v = this.views.get(id);
       v?.rect.destroy();
       v?.label.destroy();
       this.views.delete(id);
     });
 
-    // Per-patch (20 Hz): anchor the server clock + append a snapshot for each remote on the SERVER
-    // timeline. Fires after the whole patch is applied, so state.t is current.
-    this.room.onStateChange((state: any) => {
-      // Track the server clock as a SMOOTHED offset — not a hard re-anchor each patch, which would
-      // re-inject arrival jitter and make the render time jump backward. Snap on first sample / big drift.
+    // Levers (synced): a small square, yellow when on, grey when off.
+    $(room.state).levers.onAdd((lever: any, id: string) => {
+      const rect = this.add.rectangle(lever.x + this.offX, lever.y + this.offY, 14, 14, lever.on ? 0xfbbf24 : 0x6b7280);
+      this.levers.set(id, { rect, x: lever.x, y: lever.y });
+      $(lever).onChange(() => rect.setFillStyle(lever.on ? 0xfbbf24 : 0x6b7280));
+    });
+    $(room.state).levers.onRemove((_l: any, id: string) => {
+      this.levers.get(id)?.rect.destroy();
+      this.levers.delete(id);
+    });
+
+    room.onStateChange((state: any) => {
       const target = state.t - performance.now();
       this.clockOffset =
         Number.isNaN(this.clockOffset) || Math.abs(target - this.clockOffset) > 500
@@ -114,6 +137,56 @@ class ZoneScene extends Phaser.Scene {
         if (v.buf.length > 30) v.buf.shift();
       });
     });
+  }
+
+  // Draw the Caelum tile grid (floor + boxes) + portal markers, centred in the view.
+  private drawMap(m: ZoneMapMsg): void {
+    const { width, height, tileSize, tiles, portals } = m.map;
+    this.offX = Math.round((VIEW_W - width * tileSize) / 2);
+    this.offY = Math.round((VIEW_H - height * tileSize) / 2);
+    this.mapGfx?.destroy();
+    const g = this.add.graphics();
+    g.setDepth(-10);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        g.fillStyle(tiles[y][x] === 1 ? 0x4b3b2a : 0x242437, 1); // box : floor
+        g.fillRect(x * tileSize + this.offX, y * tileSize + this.offY, tileSize - 1, tileSize - 1);
+      }
+    }
+    for (const p of portals) {
+      g.fillStyle(0x22d3ee, 0.5); // portal trigger tile
+      g.fillRect(p.at.x * tileSize + this.offX, p.at.y * tileSize + this.offY, tileSize - 1, tileSize - 1);
+    }
+    this.mapGfx = g;
+  }
+
+  // Portal fired: consume the new reservation, swap rooms, rebuild the scene for the target zone.
+  private async handleTransfer(m: ZoneTransferMsg): Promise<void> {
+    this.status.setText(`crossing to ${m.zoneId}…`);
+    void this.room?.leave();
+    const room = await this.client.consumeSeatReservation(
+      m.seatReservation as unknown as Parameters<Client["consumeSeatReservation"]>[0],
+    );
+    this.enterZone(room, m.zoneId);
+  }
+
+  private resetScene(): void {
+    this.selfRect?.destroy();
+    this.selfLabel?.destroy();
+    this.selfRect = undefined;
+    this.selfLabel = undefined;
+    this.views.forEach((v) => {
+      v.rect.destroy();
+      v.label.destroy();
+    });
+    this.views.clear();
+    this.levers.forEach((l) => l.rect.destroy());
+    this.levers.clear();
+    this.mapGfx?.destroy();
+    this.mapGfx = undefined;
+    this.pending = [];
+    this.seq = 0;
+    this.clockOffset = NaN;
   }
 
   /** Server reconciliation: snap to the authoritative position, then re-apply commands it hasn't acked. */
@@ -132,29 +205,29 @@ class ZoneScene extends Phaser.Scene {
 
     if (dx !== 0 || dy !== 0) {
       const cmd: InputCommand = { seq: ++this.seq, dx, dy, dt };
-      this.room.send("input", cmd); // send to server (authoritative)
-      applyCmd(this.self, cmd);      // PREDICT locally — instant response, no round-trip wait
+      this.room.send("input", cmd); // authoritative
+      applyCmd(this.self, cmd);      // PREDICT locally — instant
       this.pending.push(cmd);        // keep for reconciliation until acked
     }
 
-    // self rendered at its PREDICTED position (feels instant); corrected invisibly on reconcile
-    if (this.selfRect) { this.selfRect.x = this.self.x + ORIGIN_X; this.selfRect.y = this.self.y + ORIGIN_Y; }
-    if (this.selfLabel) { this.selfLabel.x = this.self.x + ORIGIN_X; this.selfLabel.y = this.self.y + ORIGIN_Y - 16; }
+    // Interact: on E, toggle the nearest lever within reach (the server re-checks reach — Fornax qualify).
+    if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+      const near = this.nearestLever();
+      if (near) this.room.send("interact", { targetId: near });
+    }
 
-    // others: play buffered snapshots back on the SERVER clock, rendered INTERP_DELAY_MS behind,
-    // interpolating between the two that bracket that time. The timeline is the server's (not
-    // packet-arrival time), so jitter can't make remotes hop — only an underflow (updates stalled
-    // past the buffer) briefly holds at the newest.
-    const renderT = performance.now() + this.clockOffset - INTERP_DELAY_MS; // NaN until first patch → holds at buf[0]
+    if (this.selfRect) { this.selfRect.x = this.self.x + this.offX; this.selfRect.y = this.self.y + this.offY; }
+    if (this.selfLabel) { this.selfLabel.x = this.self.x + this.offX; this.selfLabel.y = this.self.y + this.offY - 16; }
+    this.levers.forEach((l) => { l.rect.x = l.x + this.offX; l.rect.y = l.y + this.offY; });
+
+    // others: buffered snapshots replayed on the SERVER clock, INTERP_DELAY_MS behind, interpolated.
+    const renderT = performance.now() + this.clockOffset - INTERP_DELAY_MS;
     this.views.forEach((v) => {
       const buf = v.buf;
       if (buf.length === 0) return;
       let x = buf[0].x;
       let y = buf[0].y;
       if (renderT >= buf[buf.length - 1].t) {
-        // UNDERFLOW: updates stalled past the buffer (e.g. a free-tier server-tick hitch). Extrapolate
-        // the last-known velocity for a capped window so the remote keeps gliding instead of freezing;
-        // past the cap, hold. (Any overshoot on a direction change self-corrects once snapshots resume.)
         const last = buf[buf.length - 1];
         const prev = buf.length >= 2 ? buf[buf.length - 2] : undefined;
         const ahead = Math.min(renderT - last.t, EXTRAP_MAX_MS);
@@ -174,12 +247,25 @@ class ZoneScene extends Phaser.Scene {
         x = a.x + (b.x - a.x) * f;
         y = a.y + (b.y - a.y) * f;
       }
-      v.rect.x = x + ORIGIN_X;
-      v.rect.y = y + ORIGIN_Y;
-      v.label.x = x + ORIGIN_X;
-      v.label.y = y + ORIGIN_Y - 16;
-      while (buf.length > 2 && buf[1].t < renderT) buf.shift(); // drop consumed snapshots, keep one before renderT
+      v.rect.x = x + this.offX;
+      v.rect.y = y + this.offY;
+      v.label.x = x + this.offX;
+      v.label.y = y + this.offY - 16;
+      while (buf.length > 2 && buf[1].t < renderT) buf.shift();
     });
+  }
+
+  private nearestLever(): string | undefined {
+    let best: string | undefined;
+    let bestD = INTERACT_REACH;
+    this.levers.forEach((l, id) => {
+      const d = Math.hypot(l.x - this.self.x, l.y - this.self.y);
+      if (d <= bestD) {
+        bestD = d;
+        best = id;
+      }
+    });
+    return best;
   }
 
   private held(...names: string[]): boolean { return names.some((n) => this.keys[n]?.isDown); }
@@ -187,8 +273,8 @@ class ZoneScene extends Phaser.Scene {
 
 new Phaser.Game({
   type: Phaser.AUTO,
-  width: 800,
-  height: 600,
+  width: VIEW_W,
+  height: VIEW_H,
   backgroundColor: "#1a1a2e",
   scene: ZoneScene,
 });

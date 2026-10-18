@@ -75,10 +75,10 @@ export type PlayEnterMsg = { characterId: string };
  *  internal — the client passes it straight through, so the contract keeps it structural. */
 export type SeatReservation = { sessionId: string; room: { roomId: string; [k: string]: unknown } };
 
-/** s→c reply to enter: where to go + how to get in. `seatReservation` is the Atlas-internal handoff — consume
- *  it to join the zone (no new ticket; docs/REFACTOR.md S1/J3). `zoneTicket` is the retired path, kept optional
- *  only until the POC client (Phaethon) switches to the reservation (J5), then dropped. */
-export type PlayEnterResult = { zoneId: string; realtimeUrl: string; seatReservation?: SeatReservation; zoneTicket?: string };
+/** s→c reply to enter: which zone + the Atlas-internal handoff. Consume `seatReservation` to join the zone room
+ *  (no new ticket; docs/REFACTOR.md S1/J3). `realtimeUrl` is informational (single-process: the reservation
+ *  already carries the room's address). */
+export type PlayEnterResult = { zoneId: string; realtimeUrl: string; seatReservation: SeatReservation };
 
 /** Server→client message channels on a ZONE room (distinct from SESSION_MSG on the lobby; all ride the WSS). */
 export const MSG = {
