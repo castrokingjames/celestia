@@ -1,0 +1,21 @@
+{
+  "name": "@celestia/pyxis",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pyxis — a PixiJS renderer on @celestia/jupiter. The SECOND web client (after Phaethon/Phaser), proving the SDK is renderer-agnostic: it imports only @celestia/jupiter + pixi.js, zero transport/netcode. Pyxis = the Mariner's Compass constellation; the name echoes 'Pixi' the way Phaethon echoes 'Phaser'.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@celestia/jupiter": "workspace:*",
+    "pixi.js": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}
