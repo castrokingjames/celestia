@@ -15,7 +15,7 @@
 
   "polaris": {
     "port": 3000,
-    "corsOrigins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "https://celestia-flaa.onrender.com"]
+    "corsOrigins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "https://celestia-flaa.onrender.com", "https://phaethon-5a03.onrender.com"]
   },
 
   "auth": {
