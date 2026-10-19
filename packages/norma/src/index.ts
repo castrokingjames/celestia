@@ -109,6 +109,22 @@ export type ZoneMapWire = {
   portals: { at: { x: number; y: number }; to: { zoneId: string; spawn: string } }[];
 };
 
+/** Point-vs-tile collision, SHARED by the server sim (MovementSystem) and client prediction (Predictor) so both
+ *  integrate identically — the same reason MOVE_SPEED is shared. A world-unit position is walkable iff it is in
+ *  bounds and not a box tile (1). Takes the minimal tile shape, so both the server ZoneMap and the client
+ *  ZoneMapWire satisfy it structurally. NOT a trust boundary — the server still re-checks every move (G1);
+ *  the client runs this only to predict the same outcome. (Point-vs-tile; no AABB/sliding yet.) */
+export function isWalkable(
+  map: { width: number; height: number; tileSize: number; tiles: number[][] },
+  x: number,
+  y: number,
+): boolean {
+  const tx = Math.floor(x / map.tileSize);
+  const ty = Math.floor(y / map.tileSize);
+  if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) return false;
+  return map.tiles[ty][tx] === 0;
+}
+
 /** s→c on zone join: which zone + its map to render. */
 export type ZoneMapMsg = { worldId: string; zoneId: string; map: ZoneMapWire };
 

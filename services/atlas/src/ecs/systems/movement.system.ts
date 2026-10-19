@@ -2,8 +2,7 @@
 // REALTIME.md §3). Drains each entity's queued input commands and integrates its synced transform. Behavior
 // is identical to the former in-room loop: the server CLAMPS client dt (never trusted — G1), normalizes the
 // direction (no diagonal speed boost), and advances at the SHARED MOVE_SPEED so client prediction reconciles.
-import { MOVE_SPEED, INPUT_DT_MAX } from "@celestia/norma";
-import { isWalkable } from "@celestia/firmament";
+import { MOVE_SPEED, INPUT_DT_MAX, isWalkable } from "@celestia/norma";
 import type { System, TickContext } from "../types.js";
 import type { World } from "../world.js";
 

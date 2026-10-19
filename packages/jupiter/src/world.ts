@@ -3,7 +3,7 @@
 // drives it the same way: read `self`/`players`/`levers`/`map`, call `input`/`interact`, `tick()` once per
 // render frame, and subscribe to `on(...)`. It owns prediction (self), interpolation (remotes), the server
 // clock, and the portal-transfer room swap — all hidden behind this surface.
-import type { SeatReservation, ZoneMapWire } from "@celestia/norma";
+import { isWalkable, type SeatReservation, type ZoneMapWire } from "@celestia/norma";
 import type { Transport, ZoneConnection, ZoneHandlers } from "./europa.js";
 import { Predictor } from "./ganymede/predictor.js";
 import { RemoteInterpolator } from "./ganymede/interpolator.js";
@@ -112,6 +112,9 @@ export class World {
         this.ping = this.ping ? Math.round(this.ping * 0.8 + rtt * 0.2) : Math.round(rtt);
       },
     };
+    // Mirror the server's authoritative collision in prediction (NOT a trust gate — the server still rejects
+    // illegal moves). Uses the same isWalkable the sim runs, against the map the client already holds.
+    this.#predictor.setCanWalk((x, y) => (this.map ? isWalkable(this.map, x, y) : true));
   }
 
   /** SDK-internal: bind the first zone (called by Jupiter.enter once the transport has connected). */

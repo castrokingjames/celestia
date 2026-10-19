@@ -16,6 +16,33 @@ describe("applyCmd", () => {
   });
 });
 
+describe("collision mirror", () => {
+  // A wall at x >= 100: canWalk blocks any target there — the same all-or-nothing step the server does.
+  const canWalk = (x: number) => x < 100;
+
+  it("applyCmd blocks the whole step when the target tile is not walkable", () => {
+    const p = { x: 96, y: 0 }; // STEP = 8 → target 104 is blocked
+    applyCmd(p, { seq: 1, dx: 1, dy: 0, dt: 0.05 }, canWalk);
+    assert.deepEqual(p, { x: 96, y: 0 });
+  });
+
+  it("applyCmd allows a step that stays walkable", () => {
+    const p = { x: 0, y: 0 };
+    applyCmd(p, { seq: 1, dx: 1, dy: 0, dt: 0.05 }, canWalk);
+    assert.equal(p.x, STEP);
+  });
+
+  it("predict and reconcile-replay both respect the wall", () => {
+    const pr = new Predictor();
+    pr.setCanWalk(canWalk);
+    pr.spawn(96, 0);
+    pr.predict(1, 0, 0.05); // blocked → stays at the wall
+    assert.equal(pr.x, 96);
+    pr.reconcile(96, 0, 0); // replay the un-acked (blocked) command → still blocked
+    assert.equal(pr.x, 96);
+  });
+});
+
 describe("Predictor", () => {
   it("predicts moves immediately from the spawn position", () => {
     const pr = new Predictor();
