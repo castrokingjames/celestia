@@ -5,11 +5,14 @@
 // on the same norma contract.
 import { Transport } from "./europa.js";
 import { World } from "./world.js";
-import { login, type Session } from "./io.js";
+import { login, loginPassword, type Session } from "./io.js";
+import { resolveSilentCredentials, type CredentialStore } from "./identity.js";
 
 export { World } from "./world.js";
-export type { Vec2, PlayerView, LeverView, WorldEvent } from "./world.js";
-export type { Session, Credentials } from "./io.js";
+export type { Vec2, PlayerView, LeverView, MobView, Entity, WorldEvent } from "./world.js";
+export type { Session, Credentials, PasswordCredentials } from "./io.js";
+export type { CredentialStore, SilentCredential } from "./identity.js";
+export { generateSilentCredential, resolveSilentCredentials } from "./identity.js";
 export * from "./metis.js"; // the wire contract (ZoneMapWire, intent types, …)
 
 export interface JupiterConfig {
@@ -25,10 +28,25 @@ export class Jupiter {
     this.#transport = new Transport(cfg.atlasUrl);
   }
 
-  /** REST login → the one access badge (held for enter()). Throws on bad credentials / banned (403). */
+  /** REST login via the basic method (shared gate secret) → the one access badge (held for enter()). Throws on
+   *  bad credentials / banned (403). */
   async login(username: string, secret: string): Promise<Session> {
     this.#session = await login({ polarisUrl: this.cfg.polarisUrl, username, secret });
     return this.#session;
+  }
+
+  /** REST login via the password method (username + per-user password; first login auto-registers). */
+  async loginPassword(username: string, password: string): Promise<Session> {
+    this.#session = await loginPassword({ polarisUrl: this.cfg.polarisUrl, username, password });
+    return this.#session;
+  }
+
+  /** Silent-account login: read the device-cached uid+password (or generate + persist one on first run via the
+   *  supplied CredentialStore), then log in via the password method. The returnable, zero-friction first-run flow
+   *  (BrowserQuest-style); pair with enter(promptForName) to name the character on first creation. */
+  async loginSilent(store: CredentialStore): Promise<Session> {
+    const { username, password } = resolveSilentCredentials(store);
+    return this.loginPassword(username, password);
   }
 
   /** Enter the world: Janus lobby → auto-select the first character (create one — named by `chooseName` — if

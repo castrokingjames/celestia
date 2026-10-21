@@ -12,13 +12,18 @@ export interface Session {
   account: { id: string; role: string; handle: string | null };
 }
 
-/** Log in via the basic method (login == registration). Returns the rotating refresh + the one-time access
- *  badge. A banned/suspended account gets 403. */
-export async function login(c: Credentials): Promise<Session> {
-  const res = await fetch(`${c.polarisUrl}/auth/basic`, {
+/** Credentials for the `password` method (username + per-user password — the silent-account flow). */
+export interface PasswordCredentials {
+  polarisUrl: string;
+  username: string;
+  password: string;
+}
+
+async function postLogin(url: string, payload: Record<string, string>): Promise<Session> {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username: c.username, secret: c.secret }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`login failed (${res.status})`);
   const body = (await res.json()) as {
@@ -26,4 +31,15 @@ export async function login(c: Credentials): Promise<Session> {
     account: { id: string; role: string; handle: string | null };
   };
   return { refreshToken: body.session.refreshToken, accessBadge: body.session.accessBadge, account: body.account };
+}
+
+/** Log in via the basic method (shared gate secret; login == registration). Returns the rotating refresh + the
+ *  one-time access badge. A banned/suspended account gets 403. */
+export async function login(c: Credentials): Promise<Session> {
+  return postLogin(`${c.polarisUrl}/auth/basic`, { username: c.username, secret: c.secret });
+}
+
+/** Log in via the password method (username + per-user password; first login auto-registers). Same Session shape. */
+export async function loginPassword(c: PasswordCredentials): Promise<Session> {
+  return postLogin(`${c.polarisUrl}/auth/password`, { username: c.username, password: c.password });
 }

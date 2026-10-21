@@ -73,6 +73,18 @@ export interface EventLogTable {
   recorded_at: Generated<Date>; // storage wall-time (DB-set, outside the reducer; NOT hashed)
 }
 
+// memory.precedent — seeded decision precedents (DECISIONS §2 tier-1); mirrors migrations/0005_precedent.sql.
+// `embedding` is a pgvector column: written as the bracketed text form cast `::vector`, and never SELECTed back
+// (only its cosine distance to the query is), so modelling it as string suffices for the one adapter that writes
+// it. `id` is a bigint identity (pg returns bigint as string). Atlas-owned (atlas_app has select/insert/delete).
+export interface PrecedentTable {
+  id: Generated<string>;
+  schema_key: string;
+  action: string;
+  embedding: string; // pgvector; set via sql`[…]::vector`
+  created_at: Generated<Date>;
+}
+
 export interface Database {
   role: RoleTable;
   account: AccountTable;
@@ -81,4 +93,5 @@ export interface Database {
   game_character: GameCharacterTable;
   character_placement: CharacterPlacementTable;
   "log.event": EventLogTable; // schema-qualified key → Kysely emits "log"."event"
+  "memory.precedent": PrecedentTable; // → "memory"."precedent"
 }

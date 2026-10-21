@@ -2,13 +2,14 @@
 // codebase that imports the query-builder / writes a query. To move to Drizzle/Prisma/TypeORM, reimplement
 // THIS file against the Repository interface — nothing else in the system changes. Column aliases map
 // snake_case → camelCase at the query boundary so the ports stay camelCase.
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import type { Database } from "./schema.js";
 import type {
   Account,
   AccountRef,
   Character,
   EventRow,
+  PrecedentMatch,
   RefreshRecord,
   Repository,
   RoleRow,
@@ -17,6 +18,9 @@ import type {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHAR_COLS = ["id", "account_id as accountId", "name", "status"] as const;
+
+/** A JS number[] → the pgvector text literal `[a,b,c]` (cast `::vector` in SQL). */
+const toVector = (e: readonly number[]): string => `[${e.join(",")}]`;
 
 export class KyselyRepository implements Repository {
   constructor(private readonly db: Kysely<Database>) {}
@@ -42,10 +46,11 @@ export class KyselyRepository implements Repository {
     return row ?? null;
   }
 
-  async createAccountWithIdentity(identity: { method: string; externalId: string }): Promise<Account> {
+  async createAccountWithIdentity(identity: { method: string; externalId: string; secretHash?: string }): Promise<Account> {
     return this.db.transaction().execute(async (tx) => {
       // handle stays null here: it's a deliberate onboarding choice, NOT derived from the login. role/status
-      // fall to DB defaults ('terra'/'active').
+      // fall to DB defaults ('terra'/'active'). secret_hash is set only for self-credentialed methods (`password`),
+      // null otherwise (shared-secret/IdP methods carry no per-identity secret).
       const account = await tx
         .insertInto("account")
         .values({ handle: null })
@@ -53,10 +58,25 @@ export class KyselyRepository implements Repository {
         .executeTakeFirstOrThrow();
       await tx
         .insertInto("auth_identity")
-        .values({ account_id: account.id, method: identity.method, external_id: identity.externalId })
+        .values({
+          account_id: account.id,
+          method: identity.method,
+          external_id: identity.externalId,
+          secret_hash: identity.secretHash ?? null,
+        })
         .execute();
       return account;
     });
+  }
+
+  async getIdentitySecretHash(method: string, externalId: string): Promise<string | null> {
+    const row = await this.db
+      .selectFrom("auth_identity")
+      .select(["secret_hash"])
+      .where("method", "=", method)
+      .where("external_id", "=", externalId)
+      .executeTakeFirst();
+    return row?.secret_hash ?? null;
   }
 
   async setAccountStatus(id: string, status: string): Promise<void> {
@@ -270,5 +290,42 @@ export class KyselyRepository implements Repository {
       actor: r.actor as Record<string, unknown>,
       data: r.data as Record<string, unknown>,
     }));
+  }
+
+  // ── decision precedents (pgvector nearest-neighbour; "memory"."precedent") ───
+  async seedPrecedents(
+    schemaKey: string,
+    rows: readonly { embedding: number[]; action: string }[],
+  ): Promise<void> {
+    // Replace this schema's rows so re-seeding (every room create) converges to the current seed set — not append.
+    await this.db.transaction().execute(async (tx) => {
+      await tx.deleteFrom("memory.precedent").where("schema_key", "=", schemaKey).execute();
+      if (rows.length === 0) return;
+      await tx
+        .insertInto("memory.precedent")
+        .values(
+          rows.map((r) => ({
+            schema_key: schemaKey,
+            action: r.action,
+            embedding: sql<string>`${toVector(r.embedding)}::vector`,
+          })),
+        )
+        .execute();
+    });
+  }
+
+  async nearestPrecedents(schemaKey: string, embedding: number[], k: number): Promise<PrecedentMatch[]> {
+    // pgvector cosine DISTANCE (`<=>`, vector_cosine_ops) ∈ [0,2]; similarity = 1 − distance (matches the
+    // in-memory cosine store). Reuse the same expression for SELECT + ORDER BY so there's one source of truth.
+    const distance = sql<number>`embedding <=> ${toVector(embedding)}::vector`;
+    const rows = await this.db
+      .selectFrom("memory.precedent")
+      .select("action")
+      .select(distance.as("distance"))
+      .where("schema_key", "=", schemaKey)
+      .orderBy(distance, "asc")
+      .limit(k)
+      .execute();
+    return rows.map((r) => ({ action: r.action, score: 1 - Number(r.distance) }));
   }
 }

@@ -14,6 +14,11 @@ export interface VerifiedIdentity {
   readonly externalId: string;
   /** Optional display-name hint, used only when first creating the account. */
   readonly suggestedHandle?: string;
+  /** Optional per-identity secret to persist (-> auth_identity.secret_hash) ONLY when this is a first-login
+   *  registration for a method that stores its own credential (e.g. `password`). Already-hashed by the method;
+   *  the core persists it verbatim on create and never on an existing identity. Shared-secret methods (`basic`)
+   *  and IdP methods (Discord/Google) omit it. */
+  readonly secretHash?: string;
 }
 
 /** First leg for redirect-style methods (e.g. Discord OAuth): where to send the user. */

@@ -38,14 +38,14 @@ function ctrlFor(status: string): AuthController {
 }
 
 describe("AuthController.login status mapping", () => {
-  it("maps AccountNotActiveError to 403 Forbidden for a banned account", async () => {
+  it("when a banned account logs in, then it maps AccountNotActiveError to 403 Forbidden", async () => {
     await assert.rejects(
       () => ctrlFor("banned").login("basic", { username: "u", secret: "s" }),
       ForbiddenException,
     );
   });
 
-  it("returns a session + account for an active account", async () => {
+  it("when an active account logs in, then it returns a session + account", async () => {
     const res = await ctrlFor("active").login("basic", { username: "u", secret: "s" });
     assert.equal(res.account.id, "a1");
     assert.ok(res.session.accessBadge);

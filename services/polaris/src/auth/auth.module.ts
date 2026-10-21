@@ -7,6 +7,7 @@ import type { Repository } from "@celestia/firmament";
 import { AccountsModule } from "../accounts/accounts.module.js";
 import { SessionService } from "./session.service.js";
 import { BasicAuthMethod } from "./methods/basic.auth-method.js";
+import { PasswordAuthMethod } from "./methods/password.auth-method.js";
 import type { AuthMethod } from "./auth-method.port.js";
 import { AuthController } from "./auth.controller.js";
 import { AUTH_METHODS, SESSION_SERVICE } from "./auth.tokens.js";
@@ -29,9 +30,11 @@ import { AUTH_METHODS, SESSION_SERVICE } from "./auth.tokens.js";
     },
     {
       provide: AUTH_METHODS,
-      useFactory: (cfg: ConfigService): Map<string, AuthMethod> => {
+      useFactory: (cfg: ConfigService, repo: Repository): Map<string, AuthMethod> => {
         const available: Record<string, () => AuthMethod> = {
           basic: () => new BasicAuthMethod(cfg.basicAuthSecret),
+          // username + per-user password; stores/verifies its own credential in auth_identity.secret_hash.
+          password: () => new PasswordAuthMethod({ pepper: cfg.authTokenPepper, credentials: repo }),
         };
         const methods = new Map<string, AuthMethod>();
         for (const id of cfg.enabledMethods) {
@@ -41,7 +44,7 @@ import { AUTH_METHODS, SESSION_SERVICE } from "./auth.tokens.js";
         }
         return methods;
       },
-      inject: [ConfigService],
+      inject: [ConfigService, REPOSITORY],
     },
   ],
 })

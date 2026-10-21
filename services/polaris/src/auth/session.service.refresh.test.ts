@@ -44,14 +44,14 @@ const banned: Account = { id: "a1", handle: null, role: "terra", status: "banned
 const active: Account = { id: "a1", handle: null, role: "terra", status: "active" };
 
 describe("SessionService.refresh status gate", () => {
-  it("refuses a banned account and burns the refresh chain (never rotates)", async () => {
+  it("when a banned account refreshes, then it refuses and burns the refresh chain (never rotates)", async () => {
     const { svc, calls } = make({ rec: freshRec(), account: banned });
     await assert.rejects(() => svc.refresh("whatever"), AccountNotActiveError);
     assert.equal(calls.burned, 1);
     assert.equal(calls.rotated, 0);
   });
 
-  it("rotates + mints a new session for an active account", async () => {
+  it("when an active account refreshes, then it rotates and mints a new session", async () => {
     const { svc, calls } = make({ rec: freshRec(), account: active });
     const { session } = await svc.refresh("whatever");
     assert.ok(session.accessBadge);

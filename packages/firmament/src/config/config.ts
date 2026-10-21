@@ -63,11 +63,22 @@ function requireB64Pem(name: string): string {
   return pem;
 }
 
+// corsOrigins = DEV defaults from config/default.json (localhost) + any DEPLOY origins from the
+// POLARIS_CORS_ORIGINS env var (comma-separated), merged + deduped. So a new client URL in prod is an env
+// change + restart, never a committed code edit. Order preserved; blanks trimmed.
+function resolveCorsOrigins(base: string[], env: string | undefined): string[] {
+  const extra = (env ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [...new Set([...base, ...extra])];
+}
+
 export const config = {
   env: file.env,
   auth: file.auth,
   polarisPort: file.polaris.port,
-  corsOrigins: file.polaris.corsOrigins,
+  corsOrigins: resolveCorsOrigins(file.polaris.corsOrigins, process.env.POLARIS_CORS_ORIGINS),
   realtimePort: file.realtime.port,
   tickHz: file.realtime.tickHz,
   patchRateHz: file.realtime.patchRateHz,

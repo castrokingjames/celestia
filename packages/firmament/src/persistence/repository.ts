@@ -57,6 +57,13 @@ export interface RoleRow {
   readonly active: boolean;
 }
 
+/** One retrieved decision precedent: the action it recorded + its similarity (0..1) to the query embedding
+ *  (cosine; 1 = identical). DECISIONS §2 tier-1. */
+export interface PrecedentMatch {
+  readonly action: string;
+  readonly score: number;
+}
+
 /** Minimal account view the grant CLI resolves (by handle or id). */
 export interface AccountRef {
   readonly id: string;
@@ -69,7 +76,11 @@ export interface Repository {
   // ── accounts ──────────────────────────────────────────────────────────────
   findAccountByIdentity(method: string, externalId: string): Promise<Account | null>;
   getAccountById(id: string): Promise<Account | null>;
-  createAccountWithIdentity(identity: { method: string; externalId: string }): Promise<Account>;
+  createAccountWithIdentity(identity: { method: string; externalId: string; secretHash?: string }): Promise<Account>;
+  /** The per-identity stored credential (auth_identity.secret_hash) for methods that own one (e.g. `password`),
+   *  or null if the identity doesn't exist yet (first login) or stores no secret. AUTHENTICATION-scoped read —
+   *  it never exposes account/role/privilege. */
+  getIdentitySecretHash(method: string, externalId: string): Promise<string | null>;
   setAccountStatus(id: string, status: string): Promise<void>; // Polaris write lane: ban / suspend / unban
   getAccountStatuses(ids: readonly string[]): Promise<Map<string, string>>; // Atlas batch read: revocation sweep
 
@@ -99,4 +110,11 @@ export interface Repository {
   appendEvent(row: EventRow): Promise<void>;
   getEventChainHead(stream: string): Promise<{ seq: number; hash: string } | null>;
   readEventStream(stream: string): Promise<EventRow[]>;
+
+  // ── decision precedents (DECISIONS §2 tier-1; pgvector nearest-neighbour; Atlas-owned) ──
+  /** Replace a schema's seeded precedents (embeddings already computed by the caller). Replace, not append, so
+   *  re-seeding on every room create converges to the current seed set. */
+  seedPrecedents(schemaKey: string, rows: readonly { embedding: number[]; action: string }[]): Promise<void>;
+  /** The k nearest seeded precedents to a query embedding, by cosine similarity (highest first). */
+  nearestPrecedents(schemaKey: string, embedding: number[], k: number): Promise<PrecedentMatch[]>;
 }
