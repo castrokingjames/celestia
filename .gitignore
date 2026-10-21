@@ -10,6 +10,7 @@ dist/
 # Pasted reference code only — not part of Celestia; keep out of history
 BrowserQuest/
 node-dead-reckoning/
+GodotJS/
 
 # Godot
 client/astrolabe/.godot/
