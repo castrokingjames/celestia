@@ -8,6 +8,7 @@ import {
   MSG,
   NET_MSG,
   SESSION_MSG,
+  type AssetManifest,
   type PingMsg,
   type PlayEnterResult,
   type SeatReservation,
@@ -20,18 +21,39 @@ import { createLogger } from "@celestia/argus";
 
 const log = createLogger("jupiter:europa");
 
+/** A mob's synced fields, projected as plain data (no colyseus crosses the boundary). `kind` is the client's
+ *  asset key; position rides the per-patch snapshot (interpolated), the rest arrive via onMobChange. */
+export type MobSnap = { x: number; y: number; kind: string; level: number; hp: number; maxHp: number; action: string };
+
+const mobSnap = (m: any): MobSnap => ({
+  x: m.x,
+  y: m.y,
+  kind: m.kind,
+  level: m.level,
+  hp: m.hp,
+  maxHp: m.maxHp,
+  action: m.action,
+});
+
 /** Plain-data callbacks a zone connection drives — no colyseus types cross this boundary. */
 export interface ZoneHandlers {
-  onSelfSpawn(x: number, y: number, name: string): void;
-  onSelfChange(x: number, y: number, lastSeq: number): void;
+  onSelfSpawn(x: number, y: number, name: string, hp: number, maxHp: number): void;
+  onSelfChange(x: number, y: number, lastSeq: number, hp: number): void;
   onRemoteAdd(id: string, x: number, y: number, name: string): void;
   onRemoteRemove(id: string): void;
-  /** Per server patch: the server clock + a snapshot of every REMOTE player's position. */
-  onPatch(serverT: number, remotes: ReadonlyMap<string, { x: number; y: number }>): void;
+  /** Per server patch: the server clock + a snapshot of every REMOTE player's AND every mob's position. */
+  onPatch(
+    serverT: number,
+    remotes: ReadonlyMap<string, { x: number; y: number }>,
+    mobs: ReadonlyMap<string, { x: number; y: number }>,
+  ): void;
   onLeverAdd(id: string, x: number, y: number, on: boolean): void;
   onLeverChange(id: string, on: boolean): void;
   onLeverRemove(id: string): void;
-  onMap(worldId: string, map: ZoneMapWire): void;
+  onMobAdd(id: string, mob: MobSnap): void;
+  onMobChange(id: string, mob: MobSnap): void;
+  onMobRemove(id: string): void;
+  onMap(worldId: string, map: ZoneMapWire, assets?: AssetManifest): void;
   onTransfer(zoneId: string, reservation: SeatReservation): void;
   /** Reply to a latency probe: the client timestamp the server echoed back (RTT = clientNow − t). */
   onPong(t: number): void;
@@ -44,15 +66,15 @@ export class ZoneConnection {
     h: ZoneHandlers,
   ) {
     const selfId = room.sessionId;
-    room.onMessage(MSG.zoneMap, (m: ZoneMapMsg) => h.onMap(m.worldId, m.map));
+    room.onMessage(MSG.zoneMap, (m: ZoneMapMsg) => h.onMap(m.worldId, m.map, m.assets));
     room.onMessage(MSG.zoneTransfer, (m: ZoneTransferMsg) => h.onTransfer(m.zoneId, m.seatReservation));
     room.onMessage(NET_MSG.pong, (m: PingMsg) => h.onPong(m.t));
 
     const $ = getStateCallbacks(room);
     $(room.state).players.onAdd((p: any, id: string) => {
       if (id === selfId) {
-        h.onSelfSpawn(p.x, p.y, p.name);
-        $(p).onChange(() => h.onSelfChange(p.x, p.y, p.lastSeq));
+        h.onSelfSpawn(p.x, p.y, p.name, p.hp, p.maxHp);
+        $(p).onChange(() => h.onSelfChange(p.x, p.y, p.lastSeq, p.hp));
       } else {
         h.onRemoteAdd(id, p.x, p.y, p.name);
       }
@@ -65,13 +87,20 @@ export class ZoneConnection {
       $(l).onChange(() => h.onLeverChange(id, l.on));
     });
     $(room.state).levers.onRemove((_l: any, id: string) => h.onLeverRemove(id));
+    $(room.state).mobs.onAdd((m: any, id: string) => {
+      h.onMobAdd(id, mobSnap(m));
+      $(m).onChange(() => h.onMobChange(id, mobSnap(m)));
+    });
+    $(room.state).mobs.onRemove((_m: any, id: string) => h.onMobRemove(id));
 
     room.onStateChange((state: any) => {
       const remotes = new Map<string, { x: number; y: number }>();
       state.players.forEach((p: any, id: string) => {
         if (id !== selfId) remotes.set(id, { x: p.x, y: p.y });
       });
-      h.onPatch(state.t, remotes);
+      const mobs = new Map<string, { x: number; y: number }>();
+      state.mobs.forEach((m: any, id: string) => mobs.set(id, { x: m.x, y: m.y }));
+      h.onPatch(state.t, remotes, mobs);
     });
   }
 
@@ -83,6 +112,9 @@ export class ZoneConnection {
   }
   sendInteract(targetId: string): void {
     this.room.send("interact", { targetId });
+  }
+  sendAttack(targetId: string): void {
+    this.room.send("attack", { targetId });
   }
   /** Send a latency probe carrying a client timestamp; the server echoes it → onPong computes RTT. */
   sendPing(t: number): void {

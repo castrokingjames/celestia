@@ -7,6 +7,12 @@
 export type Snap = { t: number; x: number; y: number };
 export type Vec2 = { x: number; y: number };
 
+// Distance (world units) between consecutive snapshots above which we treat the move as a TELEPORT, not motion.
+// Normal movement is speed·patchInterval (≈ a handful of units per snapshot); a respawn/portal is hundreds — so
+// any jump this large is a discontinuity we should snap across, not interpolate (which would glide the entity
+// over the map). 96 = 3 tiles: comfortably above legit per-snapshot motion, well below a teleport.
+const TELEPORT_DIST = 96;
+
 export class RemoteInterpolator {
   readonly #buf: Snap[] = [];
 
@@ -16,6 +22,10 @@ export class RemoteInterpolator {
   ) {}
 
   push(snap: Snap): void {
+    const prev = this.#buf[this.#buf.length - 1];
+    if (prev && Math.hypot(snap.x - prev.x, snap.y - prev.y) > TELEPORT_DIST) {
+      this.#buf.length = 0; // discontinuity (respawn/portal) → drop history so sample() snaps to the new spot
+    }
     this.#buf.push(snap);
     if (this.#buf.length > this.maxBuf) this.#buf.shift();
   }
