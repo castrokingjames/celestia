@@ -14,6 +14,7 @@ import { ZoneRoom, type ZoneRoomDeps } from "./rooms/ZoneRoom.js";
 import { LobbyRoom, type LobbyRoomDeps } from "./janus/lobby.room.js";
 import { SessionRegistry } from "./themis/session-registry.js";
 import { DurableEventSink } from "./fornax/index.js";
+import { PgPrecedents } from "./pallas/index.js";
 import { createLogger, configureLogging, type LogLevel } from "@celestia/argus";
 
 const log = createLogger("atlas");
@@ -55,6 +56,7 @@ async function bootstrap(): Promise<void> {
     repo,
     sessions,
     makeEventSink: (stream) => new DurableEventSink(repo, stream),
+    precedents: new PgPrecedents(repo), // real pgvector-backed mob brain store (concrete named only here — G7)
     autosaveIntervalSec: cfg.autosaveIntervalSec,
   } satisfies ZoneRoomDeps);
 

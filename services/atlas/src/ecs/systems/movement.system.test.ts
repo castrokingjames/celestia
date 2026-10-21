@@ -80,7 +80,7 @@ function worldAt(px: number, py: number): World {
 }
 
 describe("MovementSystem collision", () => {
-  it("rejects a step whose target tile is a box (no sliding yet)", () => {
+  it("when a step's target tile is a box, then the step is rejected and the position is unchanged (no sliding yet)", () => {
     const world = worldAt(30, 40); // tile (0,1); +8 right lands on tile (1,1) = box
     world.inputs.get("e1")!.push({ seq: 1, dx: 1, dy: 0, dt: 0.05 });
     new MovementSystem().update(world, ctx);
@@ -90,7 +90,7 @@ describe("MovementSystem collision", () => {
     assert.equal(p.lastSeq, 1); // the command was still processed/acked
   });
 
-  it("allows a step into open floor", () => {
+  it("when a step targets open floor, then the step is allowed and the entity moves", () => {
     const world = worldAt(30, 16); // tile (0,0); +8 right lands on tile (1,0) = floor
     world.inputs.get("e1")!.push({ seq: 1, dx: 1, dy: 0, dt: 0.05 });
     new MovementSystem().update(world, ctx);

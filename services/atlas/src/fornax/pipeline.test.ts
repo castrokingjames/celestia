@@ -29,7 +29,7 @@ function build(reach = true) {
 }
 
 describe("Fornax action pipeline", () => {
-  it("runs the full loop: toggles the lever, appends one event, fires one signal", async () => {
+  it("when an interact runs the full loop, then it toggles the lever, appends one event, and fires one signal", async () => {
     const { pipeline, sink, fired, lever, world } = build();
     const outcome = await pipeline.dispatch({ type: INTERACT, targetId: "lv1" }, actor, world, AT);
 
@@ -44,7 +44,7 @@ describe("Fornax action pipeline", () => {
     assert.deepEqual(fired[0], { type: LEVER_TOGGLED, data: { leverId: "lv1", on: true } });
   });
 
-  it("toggles back on a second interact (two events in the sink)", async () => {
+  it("when a second interact arrives, then the lever toggles back and the sink holds two events", async () => {
     const { pipeline, sink, lever, world } = build();
     await pipeline.dispatch({ type: INTERACT, targetId: "lv1" }, actor, world, AT);
     const outcome = await pipeline.dispatch({ type: INTERACT, targetId: "lv1" }, actor, world, AT + 50);
@@ -55,7 +55,7 @@ describe("Fornax action pipeline", () => {
     assert.equal(sink.events.length, 2);
   });
 
-  it("denies an unknown action at enumerate (no event, no signal)", async () => {
+  it("when the action is unknown, then it is denied at enumerate with no event and no signal", async () => {
     const { pipeline, sink, fired, world } = build();
     const outcome = await pipeline.dispatch({ type: "fly", targetId: "lv1" }, actor, world, AT);
 
@@ -66,7 +66,7 @@ describe("Fornax action pipeline", () => {
     assert.equal(fired.length, 0);
   });
 
-  it("denies an unresolved resource at enumerate (lever untouched)", async () => {
+  it("when the resource cannot be resolved, then it is denied at enumerate and the lever is untouched", async () => {
     const { pipeline, sink, lever, world } = build();
     const outcome = await pipeline.dispatch({ type: INTERACT, targetId: "nope" }, actor, world, AT);
 
@@ -77,7 +77,7 @@ describe("Fornax action pipeline", () => {
     assert.equal(sink.events.length, 0);
   });
 
-  it("denies at qualify when the actor is out of reach — no write, no event", async () => {
+  it("when the actor is out of reach, then it is denied at qualify with no write and no event", async () => {
     const { pipeline, sink, fired, lever, world } = build(false); // withinReach = false
     const outcome = await pipeline.dispatch({ type: INTERACT, targetId: "lv1" }, actor, world, AT);
 
@@ -89,7 +89,7 @@ describe("Fornax action pipeline", () => {
     assert.equal(fired.length, 0);
   });
 
-  it("denies at the access gate before execute (deny-by-default role check)", async () => {
+  it("when the actor fails the access gate, then it is denied at allow before execute (deny-by-default role check)", async () => {
     const sink = new InMemoryEventSink();
     const bus = new SignalBus();
     let signalCount = 0;

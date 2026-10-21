@@ -8,3 +8,4 @@ export * from "./durable-event-sink.js";
 export * from "./signal-bus.js";
 export * from "./astraea.js";
 export * from "./actions/lever.js";
+export * from "./actions/attack.js";

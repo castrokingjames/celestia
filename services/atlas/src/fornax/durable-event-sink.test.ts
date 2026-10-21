@@ -30,7 +30,7 @@ const actor = { accountId: "a1", characterId: "c1", role: "terra" };
 const ev = (n: number): GameEvent => ({ type: "lever_toggled", at: 1000 + n, actor, data: { leverId: "lv1", on: n % 2 === 1 } });
 
 describe("DurableEventSink", () => {
-  it("appends a verifiable chain to the store", async () => {
+  it("when events are appended, then the store holds a verifiable 1-based chain", async () => {
     const store = new StubRowStore();
     const sink = new DurableEventSink(store, "genesis");
     await sink.append(ev(1));
@@ -41,7 +41,7 @@ describe("DurableEventSink", () => {
     assert.equal(verifyChain(rows), true);
   });
 
-  it("a fresh sink over the same store RESUMES the chain (restart continuity)", async () => {
+  it("when a fresh sink opens over an existing store, then it RESUMES the chain instead of restarting (restart continuity)", async () => {
     const store = new StubRowStore();
     await new DurableEventSink(store, "genesis").append(ev(1));
     // new sink instance (simulated restart) — must read the head and continue, not restart at seq 1
@@ -53,7 +53,7 @@ describe("DurableEventSink", () => {
     assert.equal(verifyChain(rows), true);
   });
 
-  it("keeps per-stream chains independent", async () => {
+  it("when appends target different streams, then each stream's chain stays independent", async () => {
     const store = new StubRowStore();
     const g = new DurableEventSink(store, "genesis");
     const v = new DurableEventSink(store, "verdant");
@@ -66,7 +66,7 @@ describe("DurableEventSink", () => {
     assert.equal(verifyChain(await store.readEventStream("verdant")), true);
   });
 
-  it("serializes interleaved appends into a contiguous chain", async () => {
+  it("when appends are fired concurrently, then the queue serializes them into a contiguous chain", async () => {
     const store = new StubRowStore();
     const sink = new DurableEventSink(store, "genesis");
     // fire all at once without awaiting each — the internal queue must still order them
@@ -76,7 +76,7 @@ describe("DurableEventSink", () => {
     assert.equal(verifyChain(rows), true);
   });
 
-  it("survives a transient append failure: the queue is not poisoned and the chain stays gapless", async () => {
+  it("when an append fails transiently, then the queue is not poisoned and the chain stays gapless", async () => {
     const store = new StubRowStore();
     let failNext = false;
     const flaky = {

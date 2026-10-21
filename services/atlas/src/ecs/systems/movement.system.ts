@@ -2,7 +2,7 @@
 // REALTIME.md §3). Drains each entity's queued input commands and integrates its synced transform. Behavior
 // is identical to the former in-room loop: the server CLAMPS client dt (never trusted — G1), normalizes the
 // direction (no diagonal speed boost), and advances at the SHARED MOVE_SPEED so client prediction reconciles.
-import { MOVE_SPEED, INPUT_DT_MAX, isWalkable } from "@celestia/norma";
+import { MOVE_SPEED, INPUT_DT_MAX, PLAYER_RADIUS, isBodyWalkable } from "@celestia/norma";
 import type { System, TickContext } from "../types.js";
 import type { World } from "../world.js";
 
@@ -19,9 +19,10 @@ export class MovementSystem implements System {
         if (len > 0) {
           const nx = p.x + ((cmd.dx ?? 0) / len) * MOVE_SPEED * dt;
           const ny = p.y + ((cmd.dy ?? 0) / len) * MOVE_SPEED * dt;
-          // Server-authoritative collision: reject the step if the target tile is a box or out of bounds
-          // (point-vs-tile; no sliding/AABB yet — docs/REFACTOR.md S2). No map (unit tests) = no collision.
-          if (!world.zoneMap || isWalkable(world.zoneMap, nx, ny)) {
+          // Server-authoritative collision: reject the step if the player's BODY would hit a box or leave the map
+          // (radius-aware; the client predictor uses the same isBodyWalkable + PLAYER_RADIUS so it reconciles).
+          // No map (unit tests) = no collision.
+          if (!world.zoneMap || isBodyWalkable(world.zoneMap, nx, ny, PLAYER_RADIUS)) {
             p.x = nx;
             p.y = ny;
           }
