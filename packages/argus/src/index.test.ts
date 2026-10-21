@@ -10,7 +10,7 @@ class CaptureSink implements LogSink {
 }
 
 describe("argus", () => {
-  it("routes records to the configured sink with scope + level + args", () => {
+  it("when a record is logged, then it routes to the configured sink with scope + level + args", () => {
     const cap = new CaptureSink();
     configureLogging({ level: "debug", sink: cap });
     createLogger("atlas:zone").info("join", { id: "x" });
@@ -21,7 +21,7 @@ describe("argus", () => {
     assert.deepEqual(cap.entries[0].args, [{ id: "x" }]);
   });
 
-  it("filters records below the configured level", () => {
+  it("when records fall below the configured level, then it filters them out", () => {
     const cap = new CaptureSink();
     configureLogging({ level: "warn", sink: cap });
     const log = createLogger("s");
@@ -35,21 +35,21 @@ describe("argus", () => {
     );
   });
 
-  it("silent drops everything", () => {
+  it("when the level is silent, then it drops everything", () => {
     const cap = new CaptureSink();
     configureLogging({ level: "silent", sink: cap });
     createLogger("s").error("boom");
     assert.equal(cap.entries.length, 0);
   });
 
-  it("child composes the scope", () => {
+  it("when a child logger is created, then it composes the scope", () => {
     const cap = new CaptureSink();
     configureLogging({ level: "debug", sink: cap });
     createLogger("atlas:zone").child("genesis").info("hi");
     assert.equal(cap.entries[0].scope, "atlas:zone:genesis");
   });
 
-  it("the sink is swappable at runtime", () => {
+  it("when the sink is swapped at runtime, then records route to the new sink", () => {
     configureLogging({ level: "debug", sink: new NullSink() });
     const log = createLogger("s");
     log.info("dropped");
@@ -62,7 +62,7 @@ describe("argus", () => {
     );
   });
 
-  it("MultiSink fans out to every sink", () => {
+  it("when a MultiSink is configured, then it fans out to every sink", () => {
     const a = new CaptureSink();
     const b = new CaptureSink();
     configureLogging({ level: "debug", sink: new MultiSink([a, b]) });

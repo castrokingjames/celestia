@@ -9,7 +9,7 @@ function fakeClient(sessionId: string) {
 }
 
 describe("SessionRegistry", () => {
-  it("a new connection displaces the old with 4409 (one session per account)", () => {
+  it("when a new connection registers for an account, then it displaces the old with 4409 (one session per account)", () => {
     const reg = new SessionRegistry();
     const c1 = fakeClient("s1");
     const c2 = fakeClient("s2");
@@ -20,7 +20,7 @@ describe("SessionRegistry", () => {
     assert.deepEqual(reg.accountIds(), ["acc"]);
   });
 
-  it("re-registering the same connection is idempotent (no displace)", () => {
+  it("when the same connection re-registers, then it is idempotent (no displace)", () => {
     const reg = new SessionRegistry();
     const c1 = fakeClient("s1");
     reg.register("acc", c1);
@@ -28,7 +28,7 @@ describe("SessionRegistry", () => {
     assert.deepEqual(c1.left, []);
   });
 
-  it("kick evicts the live connection with 4403 and clears the slot", () => {
+  it("when kick targets a connected account, then it evicts the live connection with 4403 and clears the slot", () => {
     const reg = new SessionRegistry();
     const c1 = fakeClient("s1");
     reg.register("acc", c1);
@@ -37,13 +37,13 @@ describe("SessionRegistry", () => {
     assert.deepEqual(reg.accountIds(), []);
   });
 
-  it("kick is a no-op for an account not connected here", () => {
+  it("when kick targets an account not connected here, then it is a no-op", () => {
     const reg = new SessionRegistry();
     reg.kick("ghost", 4403); // must not throw
     assert.deepEqual(reg.accountIds(), []);
   });
 
-  it("remove only drops on identity match (a displaced client's late leave is ignored)", () => {
+  it("when remove is called, then it only drops on identity match (a displaced client's late leave is ignored)", () => {
     const reg = new SessionRegistry();
     const c1 = fakeClient("s1");
     const c2 = fakeClient("s2");

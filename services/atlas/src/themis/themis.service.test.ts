@@ -14,7 +14,7 @@ function fakeClient(sessionId: string) {
 const cfg = { revocationSweepSec: 10 } as unknown as ConfigService;
 
 describe("ThemisService.sweep", () => {
-  it("kicks present accounts that are no longer active, leaves active ones", async () => {
+  it("when sweep runs, then it kicks present accounts that are no longer active and leaves active ones", async () => {
     const registry = new SessionRegistry();
     const a = fakeClient("sA");
     const b = fakeClient("sB");
@@ -40,7 +40,7 @@ describe("ThemisService.sweep", () => {
     assert.deepEqual(registry.accountIds(), ["A"]);
   });
 
-  it("no-ops (no DB read) when no accounts are present", async () => {
+  it("when no accounts are present, then sweep no-ops (no DB read)", async () => {
     const registry = new SessionRegistry();
     let read = false;
     const repo = {
@@ -53,7 +53,7 @@ describe("ThemisService.sweep", () => {
     assert.equal(read, false); // early return on empty registry
   });
 
-  it("fail-closed: an account whose status is missing from the read is evicted", async () => {
+  it("when an account's status is missing from the read, then it is evicted (fail-closed)", async () => {
     const registry = new SessionRegistry();
     const a = fakeClient("sA");
     registry.register("A", a);

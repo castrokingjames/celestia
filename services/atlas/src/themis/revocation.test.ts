@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import { gateAccountStatus, selectRevoked, CODE_REVOKED } from "./revocation.js";
 
 describe("gateAccountStatus", () => {
-  it("passes an active account", () => {
+  it("when the account is active, then gateAccountStatus passes", () => {
     assert.deepEqual(gateAccountStatus("active"), { ok: true });
   });
 
-  it("fails closed for suspended / banned / missing / unknown", () => {
+  it("when the status is suspended / banned / missing / unknown, then gateAccountStatus fails closed", () => {
     for (const s of ["suspended", "banned", "", "weird"]) {
       const r = gateAccountStatus(s);
       assert.equal(r.ok, false);
@@ -23,7 +23,7 @@ describe("gateAccountStatus", () => {
 });
 
 describe("selectRevoked", () => {
-  it("returns present accounts whose status is not active (missing => revoked)", () => {
+  it("when present accounts are not active or missing, then selectRevoked returns them (missing => revoked)", () => {
     const status = new Map([
       ["a", "active"],
       ["b", "banned"],
@@ -33,7 +33,7 @@ describe("selectRevoked", () => {
     assert.deepEqual(selectRevoked(["a", "b", "c", "d"], status).sort(), ["b", "c", "d"]);
   });
 
-  it("returns [] when everyone present is active", () => {
+  it("when everyone present is active, then selectRevoked returns []", () => {
     const status = new Map([
       ["a", "active"],
       ["b", "active"],
