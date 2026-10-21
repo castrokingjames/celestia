@@ -2,7 +2,7 @@
 // Imported by services (and later codegen'd into client/addons/jupiter/.../celestia_contract.gd — docs/CLIENT-SDK.md §6).
 
 /** Bumped on ANY wire-shape change; the client sends this at connect and the server rejects a mismatch. */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 5;
 
 /** Intent types the client may send (the server re-validates every one — client is never trusted). */
 export const INTENT_TYPES = ["input", "attack", "interact"] as const;
@@ -11,6 +11,11 @@ export type IntentType = (typeof INTENT_TYPES)[number];
 /** Movement speed (units/sec). SHARED so client prediction and the server integrate identically —
  *  reconciliation only works if both sides use the same value (docs/REALTIME.md §3). */
 export const MOVE_SPEED = 160;
+
+/** Player collision half-extent (world units). SHARED like MOVE_SPEED: the server sim and the client predictor
+ *  both test the player's BODY (isBodyWalkable), so the player can't walk its body off the map or into a wall —
+ *  and both sides agree, so prediction still reconciles. ~half the client's 24px player box. */
+export const PLAYER_RADIUS = 12;
 
 /** Max dt (seconds) the server honors per input command — clamp vs speedhack / long stalls. */
 export const INPUT_DT_MAX = 0.05;
@@ -22,6 +27,12 @@ export type InputCommand = { seq: number; dx: number; dy: number; dt: number };
  *  real resource from authoritative state and computes the outcome (client never trusted; G1). The zone room
  *  runs this through the Fornax action pipeline (enumerate → allow → qualify → execute → event → signal). */
 export type InteractCommand = { targetId: string };
+
+/** A client attack command: which entity to strike. Carries an id ONLY — the server resolves the target from
+ *  authoritative state, checks reach + liveness, and COMPUTES the damage (client never sends an amount; G1).
+ *  Runs through the same Fornax pipeline. A mob's own attack (chosen by Pallas) re-uses this exact action with
+ *  the mob as the actor, re-validated server-side (G2). */
+export type AttackCommand = { targetId: string };
 
 /** JWT `aud` on the one-time ACCESS badge: Polaris (login/refresh) mints it; Atlas verifies + burns it at the
  *  single connection (the Janus lobby). One badge → one bound Atlas connection per account — the ONLY ticket in
@@ -105,8 +116,10 @@ export type ZoneMapWire = {
   width: number;
   height: number;
   tileSize: number;
-  tiles: number[][];
-  portals: { at: { x: number; y: number }; to: { zoneId: string; spawn: string } }[];
+  tiles: number[][]; // COLLISION grid (0 = walkable, 1 = blocked) — separate from the visual layers
+  portals: { at: { x: number; y: number }; to: { zoneId: string; spawn: string }; marker?: boolean }[]; // marker: draw the debug tile? default true, false = invisible
+  ground?: number[][]; // optional VISUAL base layer: explicit tilesheet index per cell (else tileset.tiles[value])
+  overlay?: number[][]; // optional VISUAL layer drawn above the ground (0 = none), e.g. buildings/props/trees
 };
 
 /** Point-vs-tile collision, SHARED by the server sim (MovementSystem) and client prediction (Predictor) so both
@@ -125,8 +138,45 @@ export function isWalkable(
   return map.tiles[ty][tx] === 0;
 }
 
-/** s→c on zone join: which zone + its map to render. */
-export type ZoneMapMsg = { worldId: string; zoneId: string; map: ZoneMapWire };
+/** Body-vs-tile: an entity with collision half-extent `r` fits at (x,y) iff all four corners of its AABB are
+ *  walkable (in bounds AND off walls) — so the BODY, not just its center point, clears the geometry. Built on
+ *  isWalkable. Used SERVER-SIDE for mob movement + spawn placement; mobs are interpolated (not client-predicted),
+ *  so this stays radius-aware without changing the shared point-collision the player prediction mirrors. */
+export function isBodyWalkable(
+  map: { width: number; height: number; tileSize: number; tiles: number[][] },
+  x: number,
+  y: number,
+  r: number,
+): boolean {
+  return (
+    isWalkable(map, x - r, y - r) &&
+    isWalkable(map, x + r, y - r) &&
+    isWalkable(map, x - r, y + r) &&
+    isWalkable(map, x + r, y + r)
+  );
+}
+
+/** Server-driven ASSET MANIFEST (content, authored in config/world.json, handed to the client on zone join).
+ *  The server drives WHICH asset renders each entity kind; the client is a generic renderer that fetches the art
+ *  from `base` (a static path in dev, a CDN later) and looks up `kinds[kind]` → a sprite id. The engine carries
+ *  this opaquely — it never learns what a "sprite" is (G3); only the client interprets it. */
+export type AssetManifest = {
+  base: string; // asset root URL (no trailing slash), e.g. "/assets" in dev, a CDN origin later
+  kinds: Record<string, string>; // entity kind → sprite id, e.g. { player: "clotharmor", rat: "rat", skeleton: "skeleton" }
+  tileset?: TilesetManifest; // optional ground tileset (absent → the client falls back to debug-box tiles)
+};
+
+/** Ground tileset: a sheet of `tileSize`-square tiles (row-major, 1-based index like BrowserQuest), plus a map
+ *  from the zone map's tile VALUES to tile indices. The client slices `${base}/img/<S>/${id}.png` and draws
+ *  `tiles[String(mapCellValue)]` in each cell. Server-driven + generic: the engine never interprets it. */
+export type TilesetManifest = {
+  id: string; // sprite-sheet id, e.g. "tilesheet" → ${base}/img/<S>/tilesheet.png
+  tileSize: number; // native tile size (px) in the sheet, e.g. 16
+  tiles: Record<string, number>; // map tile value (stringified) → 1-based tile index, e.g. { "0": 4, "1": 1181 }
+};
+
+/** s→c on zone join: which zone + its map to render, plus the (optional) asset manifest the client renders with. */
+export type ZoneMapMsg = { worldId: string; zoneId: string; map: ZoneMapWire; assets?: AssetManifest };
 
 /** s→c when you step on a portal: a seat reservation into the next zone — consume it (and leave the current
  *  zone room) to cross. Atlas-internal, the same mechanic as lobby enter (docs/REFACTOR.md S2 move 5). */

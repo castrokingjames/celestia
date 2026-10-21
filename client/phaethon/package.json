@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@celestia/jupiter": "workspace:*",
+    "@celestia/pictor": "workspace:*",
     "phaser": "^3.80.0"
   },
   "devDependencies": {

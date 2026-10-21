@@ -1,0 +1,23 @@
+{
+  "name": "@celestia/pictor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "description": "Pictor — the Painter's Easel: the framework-agnostic client RENDER ORCHESTRATOR. Projects the Jupiter World's entity store onto a RenderBackend, owning all the shared logic (id-diff, follow-camera, HUD, facing/animation selection, the per-entity VisualSpec). A renderer differs ONLY in its draw primitives (PixiBackend, PhaserBackend, a Godot GDScript backend later), never in the orchestration.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@celestia/jupiter": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

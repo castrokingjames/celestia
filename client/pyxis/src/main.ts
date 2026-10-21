@@ -1,38 +1,72 @@
-// Pyxis — a PixiJS renderer on @celestia/jupiter. PROOF the SDK is renderer-agnostic: this is the same shape as
-// the Phaethon/Phaser client, with Pixi primitives instead and DOM keyboard instead of Phaser's input manager.
-// It imports ONLY @celestia/jupiter + pixi.js — no colyseus, no transport, no netcode. Flow: Jupiter → login →
-// enter → drive the World (input/interact/tick) + render self/players/levers/map. (Different demo user than
-// Phaethon, so running both at once shows each as a remote in the other.)
-import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
-import { Jupiter, type World, type ZoneMapWire, type LeverView, type PlayerView } from "@celestia/jupiter";
+// Pyxis — the bootstrap + input loop. Thin: login → enter → a Pictor Orchestrator driving a PixiBackend, plus a
+// control loop (keyboard → World intents). The orchestration is shared (@celestia/pictor); the only Pixi-specific
+// code is PixiBackend. The SDK's World (entities) is the model.
+import { Jupiter, type World, type CredentialStore } from "@celestia/jupiter";
+import { Orchestrator } from "@celestia/pictor";
+import { PixiBackend } from "./pixi-backend.js";
 
 const POLARIS_URL = (import.meta.env.VITE_POLARIS_URL as string) ?? "http://127.0.0.1:3000";
 const ATLAS_URL = (import.meta.env.VITE_ATLAS_URL as string) ?? "ws://127.0.0.1:2567";
-const DEMO_SECRET = (import.meta.env.VITE_BASIC_SECRET as string) ?? "change-me-dev";
-const VIEW_W = 800, VIEW_H = 600, DT_MAX = 0.05, INTERACT_REACH = 48;
+const VIEW = { width: window.innerWidth, height: window.innerHeight }; // fills the window; kept in sync on resize
+const INTERACT_REACH = 48;
+const ATTACK_REACH = 48;
+const ATTACK_ANIM_MS = 400; // how long the local strike pose shows after an F press
 
-// Per-TAB account so you can open several tabs as different players — the server enforces one live session per
-// account (it displaces the older one, close code 4409). `?user=NAME` pins an explicit account; otherwise each
-// tab gets a stable random name kept in sessionStorage (survives reload of that tab, differs across tabs).
-function resolveDemoUser(prefix: string): string {
-  const fromUrl = new URLSearchParams(location.search).get("user");
-  if (fromUrl) return fromUrl;
-  const envUser = import.meta.env.VITE_DEMO_USER as string | undefined;
-  if (envUser) return envUser;
-  const existing = sessionStorage.getItem("celestia:demo-user");
-  if (existing) return existing;
-  const generated = `${prefix}-${Math.random().toString(36).slice(2, 6)}`;
-  sessionStorage.setItem("celestia:demo-user", generated);
-  return generated;
+// Silent account (BrowserQuest-style): a per-browser uid+password generated on first run and cached in
+// localStorage, so it survives reload/restart (device-bound — clearing storage loses the character). The SDK
+// owns generate/cache/auto-login; this is just the web storage adapter. `?user=NAME` namespaces a SEPARATE
+// cached credential so several tabs can be distinct accounts for multiplayer testing (the server enforces one
+// live session per account, close code 4409); no param = one account per browser.
+function credentialStore(): CredentialStore {
+  const ns = new URLSearchParams(location.search).get("user");
+  const key = ns ? `celestia:cred:${ns}` : "celestia:cred";
+  return {
+    load() {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      try {
+        const c = JSON.parse(raw) as { username?: unknown; password?: unknown };
+        return typeof c.username === "string" && typeof c.password === "string" ? { username: c.username, password: c.password } : null;
+      } catch {
+        return null;
+      }
+    },
+    save(c) {
+      localStorage.setItem(key, JSON.stringify(c));
+    },
+  };
 }
 
-type Remote = { g: Graphics; label: Text };
+// Character name — enter() calls this ONLY when the account has no character yet (first run). A blank/cancelled
+// prompt falls back to a generated hero name so the flow never blocks.
+function chooseName(): string {
+  const entered = (typeof window !== "undefined" ? window.prompt("Name your character:") : null)?.trim();
+  return entered && entered.length > 0 ? entered : `Hero-${Math.random().toString(36).slice(2, 6)}`;
+}
 
+// Targeting over the unified entity store: nearest in-reach lever / living mob. The server re-validates reach +
+// computes outcomes; this only picks a candidate id (G1).
 function nearestLever(w: World): string | undefined {
   let best: string | undefined;
   let bestD = INTERACT_REACH;
-  w.levers.forEach((l, id) => {
-    const d = Math.hypot(l.x - w.self.x, l.y - w.self.y);
+  w.entities.forEach((e, id) => {
+    if (e.kind !== "lever") return;
+    const d = Math.hypot(e.x - w.self.x, e.y - w.self.y);
+    if (d <= bestD) {
+      bestD = d;
+      best = id;
+    }
+  });
+  return best;
+}
+
+function nearestMob(w: World): string | undefined {
+  let best: string | undefined;
+  let bestD = ATTACK_REACH;
+  w.entities.forEach((e, id) => {
+    if (e.kind === "player" || e.kind === "lever") return; // mobs = anything else
+    if ((e.hp ?? 0) <= 0) return; // can't attack a corpse
+    const d = Math.hypot(e.x - w.self.x, e.y - w.self.y);
     if (d <= bestD) {
       bestD = d;
       best = id;
@@ -42,113 +76,55 @@ function nearestLever(w: World): string | undefined {
 }
 
 async function main(): Promise<void> {
-  const app = new Application();
-  await app.init({ width: VIEW_W, height: VIEW_H, background: "#1a1a2e", antialias: true });
-  document.body.appendChild(app.canvas);
+  const backend = new PixiBackend(VIEW);
+  await backend.init();
+  document.body.appendChild(backend.canvas);
+  const orch = new Orchestrator(backend, VIEW);
 
-  const bg = new Container();
-  const fg = new Container();
-  app.stage.addChild(bg, fg);
-  const status = new Text({ text: "logging in…", style: { fill: "#9ca3af", fontSize: 14 } });
-  status.position.set(8, 8);
-  app.stage.addChild(status);
-  const pingText = new Text({ text: "", style: { fill: "#9ca3af", fontSize: 14 } });
-  pingText.anchor.set(1, 0); // top-right
-  pingText.position.set(VIEW_W - 8, 8);
-  app.stage.addChild(pingText);
+  // Fill the window and follow resizes: update the shared VIEW (the orchestrator reads it each frame for the
+  // camera clamp) + resize the renderer. Debounced to a rAF so a drag-resize doesn't thrash the renderer.
+  let resizePending = false;
+  window.addEventListener("resize", () => {
+    if (resizePending) return;
+    resizePending = true;
+    requestAnimationFrame(() => {
+      resizePending = false;
+      VIEW.width = window.innerWidth;
+      VIEW.height = window.innerHeight;
+      backend.resize(VIEW.width, VIEW.height);
+    });
+  });
 
-  // Pixi has no key manager — wire DOM events ourselves (the one bit of extra boilerplate vs Phaser).
+  // DOM keyboard → held keys + one-shot action flags (Pixi has no key manager).
   const held = new Set<string>();
   let interactQueued = false;
+  let attackQueued = false;
+  let attackUntil = 0; // local strike-pose window (wall-clock); drives the self entity's attack animation
   window.addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     held.add(k);
     if (k === "e") interactQueued = true;
+    if (k === "f") attackQueued = true;
+    if (k === "t") orch.toggleSprites(); // boxes (default) ↔ server-driven sprites
   });
   window.addEventListener("keyup", (e) => held.delete(e.key.toLowerCase()));
   const down = (...keys: string[]): boolean => keys.some((k) => held.has(k));
 
-  let offX = VIEW_W / 2;
-  let offY = VIEW_H / 2;
-  let mapGfx: Graphics | undefined;
-  const remotes = new Map<string, Remote>();
-  const leverGfx = new Map<string, Graphics>();
-
-  const selfGfx = new Graphics().rect(-12, -12, 24, 24).fill(0x4ade80);
-  const selfLabel = new Text({ text: "you", style: { fill: "#4ade80", fontSize: 11 } });
-  selfLabel.anchor.set(0.5, 1);
-  fg.addChild(selfGfx, selfLabel);
-
-  const user = resolveDemoUser("trinity");
+  const store = credentialStore();
   const jupiter = new Jupiter({ polarisUrl: POLARIS_URL, atlasUrl: ATLAS_URL });
-  await jupiter.login(user, DEMO_SECRET);
-  const world = await jupiter.enter();
-  status.text = `${user} · green=you · blue=others · E=interact`;
+  const session = await jupiter.loginSilent(store); // first run generates+caches a uid+password; later runs reuse it
+  const world = await jupiter.enter(chooseName);
+  const user = store.load()?.username ?? session.account.id.slice(0, 8);
 
-  const drawMap = (m: ZoneMapWire): void => {
-    offX = Math.round((VIEW_W - m.width * m.tileSize) / 2);
-    offY = Math.round((VIEW_H - m.height * m.tileSize) / 2);
-    mapGfx?.destroy();
-    const g = new Graphics();
-    for (let y = 0; y < m.height; y++) {
-      for (let x = 0; x < m.width; x++) {
-        g.rect(x * m.tileSize + offX, y * m.tileSize + offY, m.tileSize - 1, m.tileSize - 1).fill(
-          m.tiles[y][x] === 1 ? 0x4b3b2a : 0x242437,
-        );
-      }
-    }
-    for (const p of m.portals) {
-      g.rect(p.at.x * m.tileSize + offX, p.at.y * m.tileSize + offY, m.tileSize - 1, m.tileSize - 1).fill({
-        color: 0x22d3ee,
-        alpha: 0.5,
-      });
-    }
-    bg.addChild(g);
-    mapGfx = g;
-  };
+  // Redraw the map + refresh the asset manifest on each zone (re)load; entity churn is handled by the frame diff.
+  world.on("map", () => {
+    if (world.map) orch.setScene(world.map, world.assets ?? undefined);
+  });
+  if (world.map) orch.setScene(world.map, world.assets ?? undefined); // in case the first map already arrived
+  backend.setStatus(`${user} · WASD move · E=interact · F=attack · T=sprites`);
 
-  const reset = (): void => {
-    remotes.forEach((r) => {
-      r.g.destroy();
-      r.label.destroy();
-    });
-    remotes.clear();
-    leverGfx.forEach((g) => g.destroy());
-    leverGfx.clear();
-    mapGfx?.destroy();
-    mapGfx = undefined;
-  };
-
-  world.on("map", (m: ZoneMapWire) => drawMap(m));
-  world.on("playerAdd", (id: string, p: PlayerView) => {
-    const g = new Graphics().rect(-12, -12, 24, 24).fill(0x60a5fa);
-    const label = new Text({ text: p.name || "…", style: { fill: "#60a5fa", fontSize: 11 } });
-    label.anchor.set(0.5, 1);
-    fg.addChild(g, label);
-    remotes.set(id, { g, label });
-  });
-  world.on("playerRemove", (id: string) => {
-    const r = remotes.get(id);
-    r?.g.destroy();
-    r?.label.destroy();
-    remotes.delete(id);
-  });
-  world.on("leverAdd", (id: string, l: LeverView) => {
-    const g = new Graphics().rect(-7, -7, 14, 14).fill(l.on ? 0xfbbf24 : 0x6b7280);
-    fg.addChild(g);
-    leverGfx.set(id, g);
-  });
-  world.on("leverChange", (id: string, l: LeverView) => {
-    leverGfx.get(id)?.clear().rect(-7, -7, 14, 14).fill(l.on ? 0xfbbf24 : 0x6b7280);
-  });
-  world.on("leverRemove", (id: string) => {
-    leverGfx.get(id)?.destroy();
-    leverGfx.delete(id);
-  });
-  world.on("zoneChange", () => reset()); // world/zone label is driven per-frame from the HUD below
-
-  app.ticker.add((ticker: Ticker) => {
-    const dt = Math.min(DT_MAX, ticker.deltaMS / 1000);
+  // Control loop: input → intents → advance prediction/interp (world.tick), then project entities to the view.
+  backend.onTick((dt) => {
     const dx = (down("a", "arrowleft") ? -1 : 0) + (down("d", "arrowright") ? 1 : 0);
     const dy = (down("w", "arrowup") ? -1 : 0) + (down("s", "arrowdown") ? 1 : 0);
     if (dx !== 0 || dy !== 0) world.input(dx, dy, dt);
@@ -157,21 +133,20 @@ async function main(): Promise<void> {
       const near = nearestLever(world);
       if (near) world.interact(near);
     }
+    if (attackQueued) {
+      attackQueued = false;
+      attackUntil = performance.now() + ATTACK_ANIM_MS; // swing shows even if nothing's in reach
+      const near = nearestMob(world);
+      if (near) world.attack(near);
+    }
     world.tick();
-
-    selfGfx.position.set(world.self.x + offX, world.self.y + offY);
-    selfLabel.position.set(world.self.x + offX, world.self.y + offY - 16);
-    remotes.forEach((r, id) => {
-      const p = world.players.get(id);
-      if (!p) return;
-      r.g.position.set(p.x + offX, p.y + offY);
-      r.label.position.set(p.x + offX, p.y + offY - 16);
-    });
-    leverGfx.forEach((g, id) => {
-      const l = world.levers.get(id);
-      if (l) g.position.set(l.x + offX, l.y + offY);
-    });
-    pingText.text = `${world.worldId}/${world.zoneId} · ${world.ping}ms · tick ${world.patchMs}ms · buf ${world.interpMs}ms`;
+    // Local strike pose: the server doesn't sync the player's action, so flag the self entity for the window so
+    // Pictor plays the attack animation (purely visual — the damage is server-authoritative, G1).
+    if (performance.now() < attackUntil) world.entities.forEach((e) => e.self && (e.action = "attack"));
+    orch.frame(
+      world.entities,
+      `${world.worldId}/${world.zoneId} · ${world.ping}ms · tick ${world.patchMs}ms · buf ${world.interpMs}ms`,
+    );
   });
 }
 
