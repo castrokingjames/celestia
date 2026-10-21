@@ -3,5 +3,10 @@
   "name": "Verdant Hollow",
   "tickHz": 20,
   "maxPerChannel": 200,
-  "map": "map.json"
+  "map": "map.json",
+  "mobs": [
+    { "kind": "rat", "at": { "x": 112, "y": 48 } },
+    { "kind": "rat", "at": { "x": 80, "y": 112 } },
+    { "kind": "skeleton", "at": { "x": 144, "y": 80 } }
+  ]
 }

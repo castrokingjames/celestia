@@ -3,11 +3,21 @@
 
   "defaultWorldId": "celestia",
 
+  "_assets_comment": "GLOBAL server-driven asset mapping handed to the client on zone join (NOT per-world — a monster/entity isn't tied to a location). The client is a generic renderer: it fetches art from `base` and renders entity `kind` → the mapped sprite id. `kinds` here holds only NON-monster entities (e.g. player); monster sprites travel with their stats in content/mobs.json and Caelum merges them into this map. `base` is a dev static path now; a CDN (+ the parked encryption) later. Per-zone LOOK (tileset) will live in content/zones/<id>/zone.json.",
+  "assets": {
+    "base": "/assets",
+    "kinds": { "player": "clotharmor" },
+    "tileset": { "id": "tilesheet", "tileSize": 16, "tiles": { "0": 155, "1": 406 } }
+  },
+
+  "_respawn_comment": "GLOBAL respawn sim defaults (not per-monster/per-zone). `scatter` = world-unit radius a respawn lands within, around its spawn anchor, when the zone's spawn row doesn't override it; `corpseOverlapMs` = how long the fresh mob overlaps its corpse before the body is flushed (no teleport flicker). Per-monster respawnDelayMs lives in content/mobs.json; per-spawn scatter override lives in content/zones/<id>/zone.json.",
+  "respawn": { "scatter": 96, "corpseOverlapMs": 300 },
+
   "worlds": {
     "celestia": {
       "name": "Celestia",
       "startingZoneId": "genesis",
-      "zones": ["genesis", "verdant"]
+      "zones": ["genesis", "verdant", "house"]
     }
   }
 }

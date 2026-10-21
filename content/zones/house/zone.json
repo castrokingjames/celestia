@@ -1,0 +1,13 @@
+{
+  "id": "house",
+  "name": "The House",
+  "tickHz": 20,
+  "maxPerChannel": 50,
+  "map": "map.json",
+  "mobs": [
+    { "kind": "rat", "at": { "x": 144, "y": 144 } },
+    { "kind": "rat", "at": { "x": 304, "y": 144 } },
+    { "kind": "rat", "at": { "x": 144, "y": 240 } },
+    { "kind": "rat", "at": { "x": 304, "y": 240 } }
+  ]
+}

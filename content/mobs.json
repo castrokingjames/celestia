@@ -1,0 +1,32 @@
+{
+  "_comment": "MONSTER ROSTER — content/data (not engine), loaded + validated by Caelum at boot (packages/firmament/src/caelum). One entry per monster KIND: its client sprite/asset key + gameplay STATS. NOT here: where/how many spawn (that is per-zone, in content/zones/<id>/zone.json `mobs`), and NOT its behaviour (what it DOES comes from Pallas seeded precedents, never a field here). `sprite` is the client's CDN asset key (kind -> art); the server sends only `kind` + state on the wire, never art. Adding a monster = add a kind here + reference it from a zone's spawn table; no code change.",
+
+  "mobs": {
+    "rat": {
+      "sprite": "rat",
+      "level": 1,
+      "maxHp": 8,
+      "damage": 1,
+      "radius": 8,
+      "moveSpeed": 90,
+      "aggroRange": 160,
+      "attackRange": 40,
+      "attackCooldownMs": 1000,
+      "decisionIntervalMs": 500,
+      "respawnDelayMs": 5000
+    },
+    "skeleton": {
+      "sprite": "skeleton",
+      "level": 8,
+      "maxHp": 30,
+      "damage": 4,
+      "radius": 11,
+      "moveSpeed": 110,
+      "aggroRange": 220,
+      "attackRange": 44,
+      "attackCooldownMs": 1200,
+      "decisionIntervalMs": 500,
+      "respawnDelayMs": 8000
+    }
+  }
+}
